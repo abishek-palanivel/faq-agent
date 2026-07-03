@@ -1,0 +1,26 @@
+# Netlify deployment configuration for frontend
+[build]
+  base = "frontend/"
+  command = "npm install && npm run build"
+  publish = "dist/"
+
+# Environment variables for production
+[build.environment]
+  VITE_API_URL = "https://faq-agent-backend.onrender.com"
+  VITE_APP_NAME = "Zed AI Support"
+  VITE_APP_VERSION = "1.0.0"
+
+# Redirect rules for React Router
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Headers for security
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
