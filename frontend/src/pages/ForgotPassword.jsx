@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');
@@ -28,25 +28,33 @@ export default function ForgotPassword() {
     e.preventDefault();
     setLoading(true);
     setError('');
+    setMessage('');
     
     try {
+      console.log('🔧 Sending password reset request for:', email);
+      
       const res = await fetch(`${API}/api/auth/forgot-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email })
       });
       
+      console.log('📡 Response status:', res.status);
       const data = await res.json();
+      console.log('📦 Response data:', data);
       
       if (res.ok) {
         setMessage(data.message);
         setSent(true);
         startResendTimer();
+        console.log('✅ Password reset request successful');
       } else {
-        setError(data.detail || 'Failed to send reset email');
+        console.error('❌ Password reset failed:', data);
+        setError(data.detail || data.message || 'Failed to send reset email');
       }
     } catch (err) {
-      setError('Network error. Please try again.');
+      console.error('❌ Network error during password reset:', err);
+      setError('Network error. Please check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -111,7 +119,26 @@ export default function ForgotPassword() {
           <div className="reset-sent" style={{textAlign: 'center', margin: '20px 0'}}>
             <div className="reset-icon" style={{fontSize: '48px', marginBottom: '16px'}}>📧</div>
             <h3 style={{color: '#fff', fontSize: '18px', marginBottom: '8px'}}>Check your email</h3>
-            <p style={{color: 'var(--text-muted)', fontSize: '14px', marginBottom: '24px'}}>We've sent a password reset link to <strong>{email}</strong></p>
+            <p style={{color: 'var(--text-muted)', fontSize: '14px', marginBottom: '24px'}}>
+              We've sent a password reset link to <strong>{email}</strong>
+            </p>
+            
+            <div className="troubleshooting" style={{
+              background: 'rgba(255,255,255,0.05)', 
+              border: '1px solid rgba(255,255,255,0.1)', 
+              borderRadius: '8px', 
+              padding: '16px', 
+              marginBottom: '24px',
+              textAlign: 'left'
+            }}>
+              <h4 style={{color: '#fff', fontSize: '14px', marginBottom: '8px'}}>📋 Troubleshooting Tips:</h4>
+              <ul style={{color: 'var(--text-muted)', fontSize: '12px', margin: 0, paddingLeft: '20px'}}>
+                <li>Check your spam/junk folder</li>
+                <li>Email may take 1-2 minutes to arrive</li>
+                <li>Verify the email address is correct</li>
+                <li>Make sure the email account exists in our system</li>
+              </ul>
+            </div>
             
             <div className="reset-actions">
               <button 

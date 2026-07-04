@@ -181,3 +181,12 @@ CREATE TABLE IF NOT EXISTS conversation_bookmarks (
     FOREIGN KEY (chat_id) REFERENCES chat_history(id) ON DELETE CASCADE,
     UNIQUE KEY unique_user_chat (user_id, chat_id)
 );
+
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(255) NOT NULL,
+    token TEXT NOT NULL,
+    expires_at DATETIME NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_email (email)
+);

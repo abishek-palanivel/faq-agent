@@ -586,13 +586,18 @@ class ResetPasswordReq(BaseModel):
 
 @app.post('/api/auth/forgot-password')
 def forgot_password(req: ForgotPasswordReq):
-    """Send password reset email"""
+    """Send password reset email with enhanced debugging"""
     try:
+        print(f"🔧 DEBUG: Forgot password request for email: {req.email}")
+        
         # Check if user exists
         user = execute_query('SELECT id, name, email FROM users WHERE email = %s', (req.email,), fetch=True)
         if not user:
+            print(f"⚠️ WARNING: User not found for email: {req.email}")
             # Return success even if user doesn't exist (security)
             return {'message': 'If this email exists, a password reset link has been sent'}
+        
+        print(f"✅ User found: {user[0]['name']} ({user[0]['email']})")
         
         # Generate reset token (valid for 1 hour)
         reset_token = create_token({
@@ -601,18 +606,30 @@ def forgot_password(req: ForgotPasswordReq):
             'exp': datetime.utcnow() + timedelta(hours=1)
         })
         
+        print(f"🔧 DEBUG: Reset token generated (length: {len(reset_token)})")
+        
         # Store reset token in database
         execute_query(
             'INSERT INTO password_reset_tokens (email, token, expires_at, created_at) VALUES (%s, %s, %s, %s) ON DUPLICATE KEY UPDATE token = VALUES(token), expires_at = VALUES(expires_at), created_at = VALUES(created_at)',
             (req.email, reset_token, datetime.utcnow() + timedelta(hours=1), datetime.utcnow())
         )
         
+        print("✅ Reset token stored in database")
+        
         # Send reset email
+        print("📧 Attempting to send password reset email...")
         success = send_password_reset_email(user[0]['email'], user[0]['name'], reset_token)
+        
+        if success:
+            print(f"✅ SUCCESS: Password reset email process completed for {req.email}")
+        else:
+            print(f"❌ FAILED: Email sending failed for {req.email}")
         
         return {'message': 'If this email exists, a password reset link has been sent'}
     except Exception as e:
-        print(f"Forgot password error: {e}")
+        print(f"❌ CRITICAL ERROR in forgot_password endpoint: {e}")
+        import traceback
+        traceback.print_exc()
         return {'message': 'If this email exists, a password reset link has been sent'}
 
 @app.post('/api/auth/reset-password')
@@ -660,16 +677,23 @@ def reset_password(req: ResetPasswordReq):
         raise HTTPException(status_code=500, detail='Password reset failed')
 
 def send_password_reset_email(user_email: str, user_name: str, reset_token: str):
-    """Send password reset email with enhanced error handling"""
+    """Send password reset email with enhanced error handling and debugging"""
     smtp_email = os.getenv('SMTP_EMAIL')
     smtp_pass = os.getenv('SMTP_PASSWORD')
     
+    print(f"🔧 DEBUG: Starting password reset email for {user_email}")
+    print(f"🔧 DEBUG: SMTP Email configured: {bool(smtp_email)}")
+    print(f"🔧 DEBUG: SMTP Password configured: {bool(smtp_pass)}")
+    
     if not smtp_email or not smtp_pass:
-        print("Email credentials not configured - reset email skipped")
+        print("❌ ERROR: Email credentials not configured in .env file")
+        print(f"   SMTP_EMAIL: {'✓' if smtp_email else '✗'}")
+        print(f"   SMTP_PASSWORD: {'✓' if smtp_pass else '✗'}")
         return False
     
     try:
         reset_link = f"https://faq-agent.netlify.app/reset-password?token={reset_token}"
+        print(f"🔧 DEBUG: Reset link generated: {reset_link[:50]}...")
         
         msg = MIMEMultipart()
         msg['From'] = smtp_email
@@ -694,42 +718,60 @@ Zed Support Team
         """
         
         msg.attach(MIMEText(body, 'plain'))
+        print("📧 Email message prepared successfully")
         
-        # Multiple SMTP approaches for better reliability
+        # Primary Gmail SMTP configuration - most reliable
         smtp_configs = [
-            {'host': 'smtp.gmail.com', 'port': 587, 'use_tls': True},
-            {'host': 'smtp.gmail.com', 'port': 465, 'use_ssl': True},
-            {'host': 'smtp-mail.outlook.com', 'port': 587, 'use_tls': True}
+            {'host': 'smtp.gmail.com', 'port': 587, 'use_tls': True, 'name': 'Gmail TLS'},
+            {'host': 'smtp.gmail.com', 'port': 465, 'use_ssl': True, 'name': 'Gmail SSL'},
         ]
         
         for config in smtp_configs:
             try:
+                print(f"🔄 Attempting to send via {config['name']} ({config['host']}:{config['port']})")
+                
                 if config.get('use_ssl'):
-                    with smtplib.SMTP_SSL(config['host'], config['port']) as server:
+                    with smtplib.SMTP_SSL(config['host'], config['port'], timeout=30) as server:
+                        server.set_debuglevel(1)  # Enable SMTP debug output
+                        print("🔐 Logging in to SMTP server...")
                         server.login(smtp_email, smtp_pass)
+                        print("📤 Sending email...")
                         server.sendmail(smtp_email, user_email, msg.as_string())
                 else:
-                    with smtplib.SMTP(config['host'], config['port']) as server:
+                    with smtplib.SMTP(config['host'], config['port'], timeout=30) as server:
+                        server.set_debuglevel(1)  # Enable SMTP debug output
                         if config.get('use_tls'):
+                            print("🔒 Starting TLS encryption...")
                             server.starttls()
+                        print("🔐 Logging in to SMTP server...")
                         server.login(smtp_email, smtp_pass)
+                        print("📤 Sending email...")
                         server.sendmail(smtp_email, user_email, msg.as_string())
                 
-                print(f"✅ Password reset email sent to {user_email} via {config['host']}")
+                print(f"✅ SUCCESS: Password reset email sent to {user_email} via {config['name']}")
                 return True
                 
-            except (smtplib.SMTPAuthenticationError, smtplib.SMTPRecipientsRefused) as e:
-                print(f"❌ SMTP error with {config['host']}: {e}")
+            except smtplib.SMTPAuthenticationError as e:
+                print(f"❌ AUTHENTICATION ERROR with {config['name']}: {e}")
+                print("   Check if App Password is correctly set for Gmail")
+                continue
+            except smtplib.SMTPRecipientsRefused as e:
+                print(f"❌ RECIPIENT REFUSED by {config['name']}: {e}")
+                continue
+            except smtplib.SMTPException as e:
+                print(f"❌ SMTP ERROR with {config['name']}: {e}")
                 continue
             except Exception as e:
-                print(f"❌ Connection error with {config['host']}: {e}")
+                print(f"❌ CONNECTION ERROR with {config['name']}: {e}")
                 continue
         
-        print("❌ All SMTP configurations failed")
+        print("❌ FAILED: All SMTP configurations failed")
         return False
         
     except Exception as e:
-        print(f"❌ Password reset email preparation failed: {e}")
+        print(f"❌ CRITICAL ERROR: Password reset email preparation failed: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 # ─────────── Chat Routes ───────────
