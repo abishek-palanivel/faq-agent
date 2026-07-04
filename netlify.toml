@@ -6,7 +6,7 @@
 
 # Environment variables for production
 [build.environment]
-  VITE_API_URL = "https://faq-agent-backend.onrender.com"
+  VITE_API_URL = "https://faq-agent-1y6i.onrender.com"
   VITE_APP_NAME = "Zed AI Support"
   VITE_APP_VERSION = "1.0.0"
 
