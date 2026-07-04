@@ -20,12 +20,16 @@ import uuid
 import shutil
 from pathlib import Path
 
-from database import execute_query
 from auth import hash_password, verify_password, create_token, decode_token
 from system_prompt import SYSTEM_PROMPT
 
 # Load environment variables from .env file
 load_dotenv()
+
+# Import database module AFTER environment variables are loaded
+from database import execute_query, init_connection_pool
+# Initialize database connection pool after loading env vars
+init_connection_pool()
 
 app = FastAPI(title='Zed AI Support API')
 
@@ -447,9 +451,6 @@ def get_google_auth_url():
 
 @app.get('/api/auth/google/callback')
 def google_callback(code: str):
-    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
-        return RedirectResponse(url="http://localhost:5173/login?error=Google+OAuth+not+configured")
-    
     token_url = "https://oauth2.googleapis.com/token"
     data = {
         "code": code,

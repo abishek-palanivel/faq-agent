@@ -64,5 +64,4 @@ def execute_query(query, params=None, fetch=False):
         if conn:
             conn.close()
 
-# Initialize pool on import
-init_connection_pool()
+# Don't initialize pool on import - wait for explicit call

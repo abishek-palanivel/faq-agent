@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export default function UserSignup() {
   const [form, setForm] = useState({ name: '', email: '', password: '' });

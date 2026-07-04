@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const authH = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('user_token')}` });
 
 // Satisfaction Survey Component
