@@ -3,7 +3,7 @@ import re
 import pandas as pd
 import google.generativeai as genai
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Depends, Header, File, UploadFile
+from fastapi import FastAPI, HTTPException, Depends, Header, File, UploadFile, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -19,6 +19,9 @@ import os
 import uuid
 import shutil
 from pathlib import Path
+import asyncio
+import threading
+import time
 
 from auth import hash_password, verify_password, create_token, decode_token
 from system_prompt import SYSTEM_PROMPT
@@ -51,6 +54,30 @@ def verify_database_setup():
 verify_database_setup()
 
 app = FastAPI(title='Zed AI Support API')
+
+# ─────────── Keep-Alive System ───────────
+def keep_alive_ping():
+    """Internal keep-alive system to prevent Render from sleeping"""
+    def ping_self():
+        while True:
+            try:
+                time.sleep(600)  # Wait 10 minutes
+                # Ping own health endpoint
+                response = requests.get('https://faq-agent-1y6i.onrender.com/health', timeout=30)
+                if response.status_code == 200:
+                    print(f"✅ Keep-alive ping successful at {datetime.now()}")
+                else:
+                    print(f"⚠️ Keep-alive ping failed with status {response.status_code}")
+            except Exception as e:
+                print(f"❌ Keep-alive ping error: {e}")
+    
+    # Start background thread
+    thread = threading.Thread(target=ping_self, daemon=True)
+    thread.start()
+    print("🚀 Keep-alive system started")
+
+# Start keep-alive system
+keep_alive_ping()
 
 # Create uploads directory
 UPLOAD_DIR = Path("uploads")
@@ -191,10 +218,7 @@ class CannedResponse(BaseModel):
     content: str
     category: Optional[str] = None
 
-# Google OAuth details - Configure in environment variables
-GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
-GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET')  
-GOOGLE_REDIRECT_URI = os.getenv('GOOGLE_REDIRECT_URI', 'https://faq-agent-1y6i.onrender.com/api/auth/google/callback')
+
 
 # ─────────── Enhanced Email Notification System ───────────
 def send_email(user_name: str, user_email: str, message: str, ticket_id: int):
@@ -385,9 +409,18 @@ migrate_csv_to_db()
 def health_check():
     return {'status': 'ok', 'service': 'Zed AI API'}
 
+# Store startup time for uptime tracking
+startup_time = datetime.now()
+
 @app.get('/health')  
 def health():
-    return {'status': 'healthy', 'timestamp': datetime.now().isoformat()}
+    uptime = datetime.now() - startup_time
+    return {
+        'status': 'healthy', 
+        'timestamp': datetime.now().isoformat(),
+        'uptime_seconds': int(uptime.total_seconds()),
+        'uptime_human': str(uptime).split('.')[0]  # Remove microseconds
+    }
 def get_query_suggestions(query: str, limit=5):
     """Get smart suggestions based on popular queries and FAQ matching"""
     if len(query.strip()) < 2:
@@ -472,71 +505,6 @@ def retrieve_faqs(query: str, top_n=5):
 def is_escalation(text: str) -> bool:
     phrases = ['human', 'support team', 'closer look', 'flag', 'connect', 'agent', 'escalate', 'representative', 'live agent']
     return any(p in text.lower() for p in phrases)
-
-# ─────────── Google OAuth Routes ───────────
-@app.get('/api/auth/google/url')
-def get_google_auth_url():
-    """Get Google OAuth URL - Always return a valid response"""
-    try:
-        if not GOOGLE_CLIENT_ID:
-            # Return a fallback response instead of 501
-            return {
-                "url": None, 
-                "error": "Google OAuth not configured",
-                "message": "Please use email/password login instead"
-            }
-        
-        # Encode the redirect URI properly
-        encoded_redirect = requests.utils.quote(GOOGLE_REDIRECT_URI, safe='')
-        url = f"https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id={GOOGLE_CLIENT_ID}&redirect_uri={encoded_redirect}&scope=openid%20profile%20email"
-        return {"url": url}
-    except Exception as e:
-        print(f"Google OAuth URL error: {e}")
-        return {
-            "url": None,
-            "error": "OAuth service temporarily unavailable", 
-            "message": "Please use email/password login instead"
-        }
-
-@app.get('/api/auth/google/callback')
-def google_callback(code: str):
-    token_url = "https://oauth2.googleapis.com/token"
-    data = {
-        "code": code,
-        "client_id": GOOGLE_CLIENT_ID,
-        "client_secret": GOOGLE_CLIENT_SECRET,
-        "redirect_uri": GOOGLE_REDIRECT_URI,
-        "grant_type": "authorization_code"
-    }
-    r = requests.post(token_url, data=data)
-    if r.status_code != 200:
-        return RedirectResponse(url="https://faq-agent.netlify.app/login?error=Google+authentication+failed")
-    
-    token_data = r.json()
-    access_token = token_data.get("access_token")
-    
-    info_url = "https://www.googleapis.com/oauth2/v3/userinfo"
-    headers = {"Authorization": f"Bearer {access_token}"}
-    r_info = requests.get(info_url, headers=headers)
-    if r_info.status_code != 200:
-        return RedirectResponse(url="https://faq-agent.netlify.app/login?error=Failed+to+fetch+user+info")
-        
-    user_info = r_info.json()
-    email = user_info.get("email")
-    name = user_info.get("name", email.split('@')[0])
-    
-    rows = execute_query('SELECT * FROM users WHERE email = %s', (email,), fetch=True)
-    if not rows:
-        uid = execute_query(
-            'INSERT INTO users (name, email, password_hash) VALUES (%s, %s, %s)',
-            (name, email, hash_password("google-oauth-dummy-password"))
-        )
-    else:
-        uid = rows[0]['id']
-        
-    token = create_token({'sub': str(uid), 'email': email, 'name': name, 'role': 'user'})
-    frontend_url = f"https://faq-agent.netlify.app/login?token={token}&name={name}&email={email}"
-    return RedirectResponse(url=frontend_url)
 
 # ─────────── Auth Routes ───────────
 @app.post('/api/auth/register')
@@ -716,31 +684,41 @@ Zed Support Team
         
         msg.attach(MIMEText(body, 'plain'))
         
-        # Enhanced SMTP connection with better error handling
-        try:
-            # Try with SSL first
-            with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
-                server.login(smtp_email, smtp_pass)
-                server.sendmail(smtp_email, user_email, msg.as_string())
-        except Exception as ssl_error:
-            print(f"SSL connection failed: {ssl_error}, trying TLS...")
-            # Fallback to TLS
-            with smtplib.SMTP('smtp.gmail.com', 587) as server:
-                server.starttls()
-                server.login(smtp_email, smtp_pass)
-                server.sendmail(smtp_email, user_email, msg.as_string())
+        # Multiple SMTP approaches for better reliability
+        smtp_configs = [
+            {'host': 'smtp.gmail.com', 'port': 587, 'use_tls': True},
+            {'host': 'smtp.gmail.com', 'port': 465, 'use_ssl': True},
+            {'host': 'smtp-mail.outlook.com', 'port': 587, 'use_tls': True}
+        ]
         
-        print(f"✅ Password reset email sent to {user_email}")
-        return True
+        for config in smtp_configs:
+            try:
+                if config.get('use_ssl'):
+                    with smtplib.SMTP_SSL(config['host'], config['port']) as server:
+                        server.login(smtp_email, smtp_pass)
+                        server.sendmail(smtp_email, user_email, msg.as_string())
+                else:
+                    with smtplib.SMTP(config['host'], config['port']) as server:
+                        if config.get('use_tls'):
+                            server.starttls()
+                        server.login(smtp_email, smtp_pass)
+                        server.sendmail(smtp_email, user_email, msg.as_string())
+                
+                print(f"✅ Password reset email sent to {user_email} via {config['host']}")
+                return True
+                
+            except (smtplib.SMTPAuthenticationError, smtplib.SMTPRecipientsRefused) as e:
+                print(f"❌ SMTP error with {config['host']}: {e}")
+                continue
+            except Exception as e:
+                print(f"❌ Connection error with {config['host']}: {e}")
+                continue
         
-    except smtplib.SMTPAuthenticationError:
-        print("❌ SMTP Authentication failed - check email credentials")
+        print("❌ All SMTP configurations failed")
         return False
-    except smtplib.SMTPRecipientsRefused:
-        print(f"❌ Invalid recipient email: {user_email}")
-        return False
+        
     except Exception as e:
-        print(f"❌ Password reset email failed: {e}")
+        print(f"❌ Password reset email preparation failed: {e}")
         return False
 
 # ─────────── Chat Routes ───────────

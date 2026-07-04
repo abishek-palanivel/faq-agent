@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -9,6 +9,20 @@ export default function ForgotPassword() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
+  const [resendTimer, setResendTimer] = useState(0);
+
+  const startResendTimer = () => {
+    setResendTimer(60);
+    const timer = setInterval(() => {
+      setResendTimer(prev => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -27,6 +41,7 @@ export default function ForgotPassword() {
       if (res.ok) {
         setMessage(data.message);
         setSent(true);
+        startResendTimer();
       } else {
         setError(data.detail || 'Failed to send reset email');
       }
@@ -37,26 +52,16 @@ export default function ForgotPassword() {
     }
   };
 
+  const resend = async () => {
+    if (resendTimer > 0) return;
+    await submit({ preventDefault: () => {} });
+  };
+
   return (
     <div className="auth-page">
       <div className="auth-card">
         <div className="auth-logo">
-          <svg className="logo-svg" width="60" height="60" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ marginBottom: '16px' }}>
-            <defs>
-              <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#6366f1" />
-                <stop offset="100%" stopColor="#a855f7" />
-              </linearGradient>
-              <filter id="logoGlow" x="-20%" y="-20%" width="140%" height="140%">
-                <stop offset="0%" stopColor="#6366f1" />
-                <feGaussianBlur stdDeviation="6" result="blur" />
-                <feComposite in="SourceGraphic" in2="blur" operator="over" />
-              </filter>
-            </defs>
-            <circle cx="50" cy="50" r="40" stroke="url(#logoGrad)" strokeWidth="6" filter="url(#logoGlow)" />
-            <path d="M35 35 H65 L50 65 Z" fill="url(#logoGrad)" />
-            <circle cx="50" cy="42" r="5" fill="#ffffff" />
-          </svg>
+          <div className="logo-mark">Z</div>
           <h1>Reset Password</h1>
           <p>Enter your email to receive a password reset link</p>
         </div>
@@ -74,80 +79,48 @@ export default function ForgotPassword() {
                 value={email}
                 onChange={e => setEmail(e.target.value)} 
                 required 
-                style={{
-                  width: '100%',
-                  padding: '14px 18px',
-                  fontSize: '16px',
-                  border: '2px solid var(--border)',
-                  borderRadius: '12px',
-                  background: 'var(--card-bg)',
-                  color: 'var(--text)',
-                  transition: 'all 0.3s ease',
-                  marginBottom: '8px'
-                }}
-                onFocus={e => e.target.style.borderColor = '#6366f1'}
-                onBlur={e => e.target.style.borderColor = 'var(--border)'}
+                autoComplete="email"
+                className="auth-input"
               />
-              <small style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '4px', display: 'block' }}>
-                We'll send you a secure link to reset your password
-              </small>
             </div>
             <button 
+              type="submit" 
               className="btn-primary" 
               disabled={loading}
-              style={{
-                width: '100%',
-                padding: '14px',
-                fontSize: '16px',
-                fontWeight: '600',
-                background: loading ? 'var(--text-dim)' : 'linear-gradient(135deg, #6366f1, #a855f7)',
-                border: 'none',
-                borderRadius: '12px',
-                color: 'white',
-                cursor: loading ? 'not-allowed' : 'pointer',
-                transition: 'all 0.3s ease',
-                marginTop: '8px'
-              }}
             >
               {loading ? (
-                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                  <div style={{
-                    width: '16px',
-                    height: '16px',
-                    border: '2px solid transparent',
-                    borderTop: '2px solid white',
-                    borderRadius: '50%',
-                    animation: 'spin 1s linear infinite'
-                  }}></div>
-                  Sending Reset Link...
-                </span>
-              ) : (
-                'Send Reset Link'
-              )}
+                <>
+                  <span className="spinner"></span>
+                  Sending...
+                </>
+              ) : 'Send Reset Link'}
             </button>
           </form>
         ) : (
-          <div style={{ textAlign: 'center', padding: '20px' }}>
-            <div style={{ 
-              fontSize: '48px', 
-              marginBottom: '16px',
-              background: 'linear-gradient(135deg, #6366f1, #a855f7)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent'
-            }}>
-              📧
+          <div className="reset-sent">
+            <div className="reset-icon">📧</div>
+            <h3>Check your email</h3>
+            <p>We've sent a password reset link to <strong>{email}</strong></p>
+            
+            <div className="reset-actions">
+              <button 
+                onClick={resend}
+                disabled={resendTimer > 0}
+                className="btn-secondary"
+              >
+                {resendTimer > 0 ? `Resend in ${resendTimer}s` : 'Resend Email'}
+              </button>
             </div>
-            <p style={{ color: 'var(--text-dim)', marginBottom: '20px' }}>
-              Check your email for the password reset link
-            </p>
-            <button onClick={() => setSent(false)} className="btn-secondary">
-              Send Another Reset Link
-            </button>
           </div>
         )}
 
         <div className="auth-footer">
           <Link to="/login">← Back to Sign In</Link>
+          <span>Remember your password? <Link to="/login">Sign in</Link></span>
+        </div>
+        
+        <div className="auth-links">
+          <Link to="/signup" className="admin-link">Create Account →</Link>
         </div>
       </div>
     </div>
