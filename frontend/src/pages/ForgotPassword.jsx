@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');
@@ -61,7 +61,18 @@ export default function ForgotPassword() {
     <div className="auth-page">
       <div className="auth-card">
         <div className="auth-logo">
-          <div className="logo-mark">Z</div>
+          {/* Proper SVG Logo consistent with Login */}
+          <svg className="logo-svg" width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <defs>
+              <linearGradient id="logoGrad" x1="0" y1="0" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+                <stop stopColor="#6366f1"/>
+                <stop offset="1" stopColor="#a855f7"/>
+              </linearGradient>
+            </defs>
+            <rect width="56" height="56" rx="16" fill="url(#logoGrad)"/>
+            <path d="M17 18h22l-6 8h-10l-6-8zm0 20l6-8h10l6 8H17z" fill="white" opacity="0.95"/>
+            <circle cx="28" cy="28" r="4" fill="white"/>
+          </svg>
           <h1>Reset Password</h1>
           <p>Enter your email to receive a password reset link</p>
         </div>
@@ -97,16 +108,17 @@ export default function ForgotPassword() {
             </button>
           </form>
         ) : (
-          <div className="reset-sent">
-            <div className="reset-icon">📧</div>
-            <h3>Check your email</h3>
-            <p>We've sent a password reset link to <strong>{email}</strong></p>
+          <div className="reset-sent" style={{textAlign: 'center', margin: '20px 0'}}>
+            <div className="reset-icon" style={{fontSize: '48px', marginBottom: '16px'}}>📧</div>
+            <h3 style={{color: '#fff', fontSize: '18px', marginBottom: '8px'}}>Check your email</h3>
+            <p style={{color: 'var(--text-muted)', fontSize: '14px', marginBottom: '24px'}}>We've sent a password reset link to <strong>{email}</strong></p>
             
             <div className="reset-actions">
               <button 
                 onClick={resend}
                 disabled={resendTimer > 0}
                 className="btn-secondary"
+                style={{width: '100%'}}
               >
                 {resendTimer > 0 ? `Resend in ${resendTimer}s` : 'Resend Email'}
               </button>
@@ -114,13 +126,8 @@ export default function ForgotPassword() {
           </div>
         )}
 
-        <div className="auth-footer">
+        <div className="auth-footer" style={{marginTop: '24px'}}>
           <Link to="/login">← Back to Sign In</Link>
-          <span>Remember your password? <Link to="/login">Sign in</Link></span>
-        </div>
-        
-        <div className="auth-links">
-          <Link to="/signup" className="admin-link">Create Account →</Link>
         </div>
       </div>
     </div>

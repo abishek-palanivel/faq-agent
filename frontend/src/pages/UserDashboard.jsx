@@ -30,9 +30,6 @@ export default function UserDashboard() {
   const name = localStorage.getItem('user_name') || 'User';
   const email = localStorage.getItem('user_email') || '';
 
-  console.log('UserDashboard rendered, current tab:', tab);
-  console.log('Messages length:', messages.length);
-  console.log('Data loaded status:', dataLoaded);
 
   // Auto scroll to bottom of messages
   useEffect(() => { 
@@ -178,12 +175,18 @@ export default function UserDashboard() {
     setIsTyping(true);
 
     try {
+      // Only send last 6 messages as context to keep request fast
+      const recentHistory = messages.slice(-6).map(m => ({
+        role: m.role,
+        content: m.content
+      }));
+      
       const res = await fetch(`${API}/api/chat`, {
         method: 'POST',
         headers: authH(),
         body: JSON.stringify({
           message: messageText.trim(),
-          history: messages
+          history: recentHistory
         })
       });
 
@@ -191,16 +194,15 @@ export default function UserDashboard() {
       
       const data = await res.json();
       
-      setTimeout(() => {
-        setIsTyping(false);
-        setMessages(prev => [...prev, {
-          role: 'assistant',
-          content: data.response,
-          timestamp: new Date().toISOString(),
-          suggestions: data.suggestions || []
-        }]);
-        setLoading(false);
-      }, 500);
+      // Show response immediately — no artificial delay
+      setIsTyping(false);
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: data.response,
+        timestamp: new Date().toISOString(),
+        suggestions: data.suggestions || []
+      }]);
+      setLoading(false);
 
     } catch (error) {
       setIsTyping(false);
@@ -242,7 +244,17 @@ export default function UserDashboard() {
       <div className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-header">
           <div className="sidebar-logo">
-            <div className="logo-mark">Z</div>
+            <svg width="32" height="32" viewBox="0 0 56 56" fill="none">
+              <defs>
+                <linearGradient id="sideLogoGrad" x1="0" y1="0" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+                  <stop stopColor="#6366f1"/>
+                  <stop offset="1" stopColor="#a855f7"/>
+                </linearGradient>
+              </defs>
+              <rect width="56" height="56" rx="16" fill="url(#sideLogoGrad)"/>
+              <path d="M17 18h22l-6 8h-10l-6-8zm0 20l6-8h10l6 8H17z" fill="white" opacity="0.95"/>
+              <circle cx="28" cy="28" r="4" fill="white"/>
+            </svg>
             <span className="sidebar-title">Zed AI Support</span>
           </div>
         </div>

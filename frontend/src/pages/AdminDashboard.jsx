@@ -377,16 +377,17 @@ export default function AdminDashboard() {
       {/* Sidebar */}
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <svg className="logo-svg" width="38" height="38" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <svg className="logo-svg" width="32" height="32" viewBox="0 0 56 56" fill="none">
             <defs>
-              <linearGradient id="logoGradAdminSide" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#ef4444" />
-                <stop offset="100%" stopColor="#f97316" />
+              <linearGradient id="adminGrad" x1="0" y1="0" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+                <stop stopColor="#ef4444"/>
+                <stop offset="1" stopColor="#f97316"/>
               </linearGradient>
             </defs>
-            <circle cx="50" cy="50" r="42" stroke="url(#logoGradAdminSide)" strokeWidth="8" />
-            <path d="M35 35 H65 L50 65 Z" fill="url(#logoGradAdminSide)" />
-            <circle cx="50" cy="42" r="5" fill="#ffffff" />
+            <rect width="56" height="56" rx="16" fill="url(#adminGrad)"/>
+            <path d="M28 14l12 10v14H16V24l12-10z" fill="white" opacity="0.9"/>
+            <rect x="24" y="30" width="8" height="8" rx="1" fill="url(#adminGrad)"/>
+            <circle cx="28" cy="24" r="3" fill="url(#adminGrad)"/>
           </svg>
           <div>
             <h2>Admin Panel</h2>

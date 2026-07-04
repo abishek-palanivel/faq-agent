@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
 export default function UserSignup() {
   const [form, setForm] = useState({ name: '', email: '', password: '' });
@@ -34,21 +34,17 @@ export default function UserSignup() {
     <div className="auth-page">
       <div className="auth-card">
         <div className="auth-logo">
-          <svg className="logo-svg" width="60" height="60" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ marginBottom: '16px' }}>
+          {/* Proper SVG Logo consistent with Login */}
+          <svg className="logo-svg" width="56" height="56" viewBox="0 0 56 56" fill="none">
             <defs>
-              <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#6366f1" />
-                <stop offset="100%" stopColor="#a855f7" />
+              <linearGradient id="logoGrad" x1="0" y1="0" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+                <stop stopColor="#6366f1"/>
+                <stop offset="1" stopColor="#a855f7"/>
               </linearGradient>
-              <filter id="logoGlow" x="-20%" y="-20%" width="140%" height="140%">
-                <stop offset="0%" stopColor="#6366f1" />
-                <feGaussianBlur stdDeviation="6" result="blur" />
-                <feComposite in="SourceGraphic" in2="blur" operator="over" />
-              </filter>
             </defs>
-            <circle cx="50" cy="50" r="40" stroke="url(#logoGrad)" strokeWidth="6" filter="url(#logoGlow)" />
-            <path d="M35 35 H65 L50 65 Z" fill="url(#logoGrad)" />
-            <circle cx="50" cy="42" r="5" fill="#ffffff" />
+            <rect width="56" height="56" rx="16" fill="url(#logoGrad)"/>
+            <path d="M17 18h22l-6 8h-10l-6-8zm0 20l6-8h10l6 8H17z" fill="white" opacity="0.95"/>
+            <circle cx="28" cy="28" r="4" fill="white"/>
           </svg>
           <h1>Create Account</h1>
           <p>Join Zed Support — it's free</p>
@@ -74,8 +70,8 @@ export default function UserSignup() {
             {loading ? 'Creating account...' : 'Create Account'}
           </button>
         </form>
-        <div className="auth-footer">
-          Already have an account? <Link to="/login">Sign in</Link>
+        <div className="auth-footer" style={{marginTop: '24px'}}>
+          Already have an account? <Link to="/login" style={{marginLeft: '6px'}}>Sign in</Link>
         </div>
       </div>
     </div>
