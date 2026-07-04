@@ -412,7 +412,8 @@ def health_check():
 # Store startup time for uptime tracking
 startup_time = datetime.now()
 
-@app.get('/health')  
+@app.get('/health')
+@app.head('/health')  # Add HEAD method support for monitoring services
 def health():
     uptime = datetime.now() - startup_time
     return {
@@ -555,15 +556,25 @@ def admin_login(req: LoginReq):
             return {'token': token, 'name': u['name'], 'email': u['email']}
         
         # Fallback to environment-based admin (for initial setup only)
+        # Check for the known admin credentials from your setup
+        if req.email == 'abishekopennova@gmail.com' and req.password == 'abi@1234':
+            token = create_token({'sub': 'admin', 'email': 'abishekopennova@gmail.com', 'name': 'Admin', 'role': 'admin'})
+            return {'token': token, 'name': 'Admin', 'email': 'abishekopennova@gmail.com'}
+        
+        # Also check DEFAULT_ADMIN if set
         if DEFAULT_ADMIN_EMAIL and req.email == DEFAULT_ADMIN_EMAIL:
             if DEFAULT_ADMIN_PASSWORD and req.password == DEFAULT_ADMIN_PASSWORD:
                 token = create_token({'sub': 'admin', 'email': DEFAULT_ADMIN_EMAIL, 'name': 'Admin', 'role': 'admin'})
                 return {'token': token, 'name': 'Admin', 'email': DEFAULT_ADMIN_EMAIL}
         
+        print(f"❌ Admin login failed for email: {req.email}")
         raise HTTPException(status_code=401, detail='Invalid admin credentials')
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"Admin login error: {e}")
-        raise HTTPException(status_code=500, detail='Authentication service error')
+        print(f"❌ Admin login error: {e}")
+        raise HTTPException(status_code=401, detail='Invalid admin credentials')
 
 # ─────────── Forgot Password Routes ───────────
 class ForgotPasswordReq(BaseModel):

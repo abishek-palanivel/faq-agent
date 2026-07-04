@@ -31,11 +31,24 @@ export default function AdminDashboard() {
   const nav = useNavigate();
 
   useEffect(() => { 
+    let isMounted = true;
+    
     const initializeAdmin = async () => {
-      await loadStats(); 
-      await loadTickets();
+      try {
+        if (isMounted) {
+          await loadStats(); 
+          await loadTickets();
+        }
+      } catch (error) {
+        console.error('Admin initialization error:', error);
+      }
     };
+    
     initializeAdmin();
+    
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // Comprehensive refresh function for current tab

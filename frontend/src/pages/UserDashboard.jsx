@@ -18,6 +18,11 @@ export default function UserDashboard() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState({
+    faqs: false,
+    tickets: false,
+    notifications: false
+  });
   const endRef = useRef(null);
   const inputRef = useRef(null);
   const nav = useNavigate();
@@ -25,44 +30,82 @@ export default function UserDashboard() {
   const name = localStorage.getItem('user_name') || 'User';
   const email = localStorage.getItem('user_email') || '';
 
+  console.log('UserDashboard rendered, current tab:', tab);
+  console.log('Messages length:', messages.length);
+  console.log('Data loaded status:', dataLoaded);
+
   // Auto scroll to bottom of messages
   useEffect(() => { 
     endRef.current?.scrollIntoView({ behavior: 'smooth' }); 
   }, [messages]);
 
-  // Initialize dashboard once
+  // Initialize dashboard once with proper error handling
   useEffect(() => {
+    let isMounted = true; // Prevent state updates if component unmounts
+    
     const initializeDashboard = async () => {
-      await loadInitialData();
-      
-      // Only set initial message if no messages exist
-      if (messages.length === 0) {
-        setMessages([{
-          role: 'assistant',
-          content: `Hi ${name}! 👋 I'm your AI assistant. I can help you with questions about orders, billing, returns, account issues, or anything else. What can I help you with today?`,
-          timestamp: new Date().toISOString(),
-          suggestions: ['Check my order status', 'Return an item', 'Billing question', 'Account settings']
-        }]);
+      try {
+        if (isMounted) {
+          await loadInitialData();
+          
+          // Always set initial message for chat
+          if (isMounted) {
+            setMessages([{
+              role: 'assistant',
+              content: `Hi ${name}! 👋 I'm your AI assistant. I can help you with questions about orders, billing, returns, account issues, or anything else. What can I help you with today?`,
+              timestamp: new Date().toISOString(),
+              suggestions: ['Check my order status', 'Return an item', 'Billing question', 'Account settings']
+            }]);
+          }
+        }
+      } catch (error) {
+        console.error('Dashboard initialization error:', error);
+        // Set fallback message even if API fails
+        if (isMounted) {
+          setMessages([{
+            role: 'assistant',
+            content: `Hi ${name}! 👋 Welcome to Zed AI Support. I'm here to help you!`,
+            timestamp: new Date().toISOString(),
+            suggestions: ['Get Started', 'Browse FAQs', 'Contact Support']
+          }]);
+        }
       }
     };
     
     initializeDashboard();
+    
+    // Cleanup function
+    return () => {
+      isMounted = false;
+    };
   }, []); // Empty dependency array to run only once
 
   const loadInitialData = async () => {
-    await Promise.all([
-      loadNotifications(),
-      loadFaqs(),
-      loadTickets()
-    ]);
+    // Only load data that hasn't been loaded yet
+    const promises = [];
+    
+    if (!dataLoaded.notifications) {
+      promises.push(loadNotifications());
+    }
+    if (!dataLoaded.faqs) {
+      promises.push(loadFaqs());
+    }
+    if (!dataLoaded.tickets) {
+      promises.push(loadTickets());
+    }
+    
+    await Promise.all(promises);
   };
 
   const loadNotifications = async () => {
+    if (dataLoaded.notifications) return; // Prevent duplicate calls
+    
     try {
       const res = await fetch(`${API}/api/notifications`, { headers: authH() });
       if (res.ok) {
         const data = await res.json();
         setNotifications(data);
+        setDataLoaded(prev => ({ ...prev, notifications: true }));
       }
     } catch (e) {
       console.log('Failed to load notifications:', e);
@@ -70,11 +113,14 @@ export default function UserDashboard() {
   };
 
   const loadTickets = async () => {
+    if (dataLoaded.tickets) return; // Prevent duplicate calls
+    
     try {
       const res = await fetch(`${API}/api/user/tickets`, { headers: authH() });
       if (res.ok) {
         const data = await res.json();
         setTickets(data);
+        setDataLoaded(prev => ({ ...prev, tickets: true }));
       }
     } catch (e) {
       console.log('Failed to load tickets:', e);
@@ -82,12 +128,15 @@ export default function UserDashboard() {
   };
 
   const loadFaqs = async () => {
+    if (dataLoaded.faqs) return; // Prevent duplicate calls
+    
     try {
       const res = await fetch(`${API}/api/faqs`, { headers: authH() });
       if (res.ok) {
         const data = await res.json();
         setFaqs(data);
         setFilteredFaqs(data);
+        setDataLoaded(prev => ({ ...prev, faqs: true }));
       }
     } catch (e) {
       console.log('Failed to load FAQs:', e);
@@ -211,7 +260,8 @@ export default function UserDashboard() {
             onClick={() => { 
               setTab('faqs'); 
               setSidebarOpen(false); 
-              if (tab !== 'faqs' && faqs.length === 0) {
+              // Only load FAQs if not already loaded
+              if (!dataLoaded.faqs) {
                 loadFaqs(); 
               }
             }}
@@ -224,7 +274,8 @@ export default function UserDashboard() {
             onClick={() => { 
               setTab('tickets'); 
               setSidebarOpen(false); 
-              if (tab !== 'tickets') {
+              // Only load tickets if not already loaded
+              if (!dataLoaded.tickets) {
                 loadTickets(); 
               }
             }}
@@ -281,33 +332,48 @@ export default function UserDashboard() {
 
         {/* Content Area */}
         <div className="content">
+          {/* Debug info */}
+          {process.env.NODE_ENV === 'development' && (
+            <div style={{position: 'fixed', top: 0, right: 0, background: 'red', color: 'white', padding: '4px', zIndex: 9999, fontSize: '12px'}}>
+              Tab: {tab} | Messages: {messages.length}
+            </div>
+          )}
+          
           {/* AI Chat Tab */}
           {tab === 'chat' && (
             <div className="chat-container">
               <div className="chat-messages">
-                {messages.map((msg, i) => (
-                  <div key={i} className={`message ${msg.role}`}>
-                    <div className="message-content">
-                      {msg.content}
-                    </div>
-                    <div className="message-time">
-                      {new Date(msg.timestamp).toLocaleTimeString()}
-                    </div>
-                    {msg.suggestions && msg.suggestions.length > 0 && (
-                      <div className="message-suggestions">
-                        {msg.suggestions.slice(0, 3).map((suggestion, idx) => (
-                          <button 
-                            key={idx}
-                            className="suggestion-btn"
-                            onClick={() => sendMessage(suggestion)}
-                          >
-                            {suggestion}
-                          </button>
-                        ))}
-                      </div>
-                    )}
+                {messages.length === 0 ? (
+                  <div className="welcome-message">
+                    <div className="bot-icon">🤖</div>
+                    <h3>Welcome to Zed AI Support</h3>
+                    <p>Loading your chat experience...</p>
                   </div>
-                ))}
+                ) : (
+                  messages.map((msg, i) => (
+                    <div key={i} className={`message ${msg.role}`}>
+                      <div className="message-content">
+                        {msg.content}
+                      </div>
+                      <div className="message-time">
+                        {new Date(msg.timestamp).toLocaleTimeString()}
+                      </div>
+                      {msg.suggestions && msg.suggestions.length > 0 && (
+                        <div className="message-suggestions">
+                          {msg.suggestions.slice(0, 3).map((suggestion, idx) => (
+                            <button 
+                              key={idx}
+                              className="suggestion-btn"
+                              onClick={() => sendMessage(suggestion)}
+                            >
+                              {suggestion}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
                 
                 {isTyping && (
                   <div className="message assistant typing">
@@ -376,7 +442,7 @@ export default function UserDashboard() {
                 </p>
                 
                 <div className="faq-list">
-                  {filteredFaqs.map((faq, i) => (
+                  {filteredFaqs.length > 0 ? filteredFaqs.map((faq, i) => (
                     <div key={i} className="faq-item">
                       <div className="faq-question">
                         <span className="category-tag">{faq.category}</span>
@@ -398,10 +464,14 @@ export default function UserDashboard() {
                         </button>
                       </div>
                     </div>
-                  ))}
+                  )) : (
+                    <div className="no-results">
+                      <p>Loading FAQs...</p>
+                    </div>
+                  )}
                 </div>
                 
-                {filteredFaqs.length === 0 && (
+                {filteredFaqs.length === 0 && faqs.length > 0 && (
                   <div className="no-results">
                     <p>No FAQs found matching your search.</p>
                     <button 
@@ -437,7 +507,7 @@ export default function UserDashboard() {
                   <div key={i} className="ticket-card">
                     <div className="ticket-header">
                       <span className="ticket-id">#{ticket.id}</span>
-                      <span className={`status-badge ${ticket.status.toLowerCase()}`}>
+                      <span className={`status-badge ${ticket.status?.toLowerCase()}`}>
                         {ticket.status}
                       </span>
                     </div>
@@ -484,6 +554,14 @@ export default function UserDashboard() {
                   </button>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Fallback content if no tab matches */}
+          {!['chat', 'faqs', 'tickets', 'profile'].includes(tab) && (
+            <div className="fallback-content">
+              <h2>Welcome to Zed AI Support</h2>
+              <p>Please select a tab from the sidebar to get started.</p>
             </div>
           )}
         </div>
