@@ -31,6 +31,25 @@ from database import execute_query, init_connection_pool
 # Initialize database connection pool after loading env vars
 init_connection_pool()
 
+# Verify critical tables exist
+def verify_database_setup():
+    """Verify essential tables exist"""
+    try:
+        tables = ['users', 'faq_entries', 'tickets', 'chat_history', 'password_reset_tokens']
+        for table in tables:
+            result = execute_query(f"SHOW TABLES LIKE '{table}'", fetch=True)
+            if not result:
+                print(f"⚠️ Warning: Table '{table}' not found in database")
+                return False
+        print("✅ Database tables verified")
+        return True
+    except Exception as e:
+        print(f"❌ Database verification error: {e}")
+        return False
+
+# Run database verification
+verify_database_setup()
+
 app = FastAPI(title='Zed AI Support API')
 
 # Create uploads directory
@@ -361,6 +380,14 @@ def update_conversation_context(user_id: int, session_id: str, message: str, top
 
 # Initialize database migration
 migrate_csv_to_db()
+
+@app.get('/')
+def health_check():
+    return {'status': 'ok', 'service': 'Zed AI API'}
+
+@app.get('/health')  
+def health():
+    return {'status': 'healthy', 'timestamp': datetime.now().isoformat()}
 def get_query_suggestions(query: str, limit=5):
     """Get smart suggestions based on popular queries and FAQ matching"""
     if len(query.strip()) < 2:
