@@ -340,8 +340,8 @@ def update_conversation_context(user_id: int, session_id: str, message: str, top
             })
             
             execute_query(
-                'UPDATE conversation_context SET context_data = %s, last_topic = %s, updated_at = NOW() WHERE id = %s',
-                (json.dumps(context_data), topic, existing['id'])
+                'UPDATE conversation_context SET context_data = %s, last_topic = %s, updated_at = %s WHERE id = %s',
+                (json.dumps(context_data), topic, datetime.now(), existing['id'])
             )
         else:
             # Create new context
@@ -353,8 +353,8 @@ def update_conversation_context(user_id: int, session_id: str, message: str, top
                 }]
             }
             execute_query(
-                'INSERT INTO conversation_context (user_id, session_id, context_data, last_topic) VALUES (%s, %s, %s, %s)',
-                (user_id, session_id, json.dumps(context_data), topic)
+                'INSERT INTO conversation_context (user_id, session_id, context_data, last_topic, updated_at) VALUES (%s, %s, %s, %s, %s)',
+                (user_id, session_id, json.dumps(context_data), topic, datetime.now())
             )
     except Exception as e:
         print(f"Context update error: {e}")
@@ -497,17 +497,29 @@ def google_callback(code: str):
 # ─────────── Auth Routes ───────────
 @app.post('/api/auth/register')
 def register(req: RegisterReq):
+    # Validate password length for bcrypt compatibility
+    if len(req.password.encode('utf-8')) > 72:
+        raise HTTPException(status_code=400, detail='Password too long - maximum 72 characters allowed')
+    
     if execute_query('SELECT id FROM users WHERE email = %s', (req.email,), fetch=True):
         raise HTTPException(status_code=400, detail='Email already registered')
-    uid = execute_query(
-        'INSERT INTO users (name, email, password_hash) VALUES (%s, %s, %s)',
-        (req.name, req.email, hash_password(req.password))
-    )
-    token = create_token({'sub': str(uid), 'email': req.email, 'name': req.name, 'role': 'user'})
-    return {'token': token, 'name': req.name, 'email': req.email}
+    
+    try:
+        uid = execute_query(
+            'INSERT INTO users (name, email, password_hash) VALUES (%s, %s, %s)',
+            (req.name, req.email, hash_password(req.password))
+        )
+        token = create_token({'sub': str(uid), 'email': req.email, 'name': req.name, 'role': 'user'})
+        return {'token': token, 'name': req.name, 'email': req.email}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.post('/api/auth/login')
 def login(req: LoginReq):
+    # Validate password length for bcrypt compatibility
+    if len(req.password.encode('utf-8')) > 72:
+        raise HTTPException(status_code=401, detail='Invalid email or password')
+    
     rows = execute_query('SELECT * FROM users WHERE email = %s', (req.email,), fetch=True)
     if not rows or not verify_password(req.password, rows[0]['password_hash']):
         raise HTTPException(status_code=401, detail='Invalid email or password')
@@ -517,21 +529,160 @@ def login(req: LoginReq):
 
 @app.post('/api/auth/admin/login')
 def admin_login(req: LoginReq):
-    # First check database for admin users
-    admin_user = execute_query('SELECT * FROM users WHERE email = %s AND role = %s', (req.email, 'admin'), fetch=True)
+    # Validate password length for bcrypt compatibility
+    if len(req.password.encode('utf-8')) > 72:
+        raise HTTPException(status_code=401, detail='Invalid admin credentials')
     
-    if admin_user and verify_password(req.password, admin_user[0]['password_hash']):
-        u = admin_user[0]
-        token = create_token({'sub': str(u['id']), 'email': u['email'], 'name': u['name'], 'role': 'admin'})
-        return {'token': token, 'name': u['name'], 'email': u['email']}
+    try:
+        # First check database for admin users
+        admin_user = execute_query('SELECT * FROM users WHERE email = %s AND role = %s', (req.email, 'admin'), fetch=True)
+        
+        if admin_user and verify_password(req.password, admin_user[0]['password_hash']):
+            u = admin_user[0]
+            token = create_token({'sub': str(u['id']), 'email': u['email'], 'name': u['name'], 'role': 'admin'})
+            return {'token': token, 'name': u['name'], 'email': u['email']}
+        
+        # Fallback to environment-based admin (for initial setup only)
+        if DEFAULT_ADMIN_EMAIL and req.email == DEFAULT_ADMIN_EMAIL:
+            if DEFAULT_ADMIN_PASSWORD and req.password == DEFAULT_ADMIN_PASSWORD:
+                token = create_token({'sub': 'admin', 'email': DEFAULT_ADMIN_EMAIL, 'name': 'Admin', 'role': 'admin'})
+                return {'token': token, 'name': 'Admin', 'email': DEFAULT_ADMIN_EMAIL}
+        
+        raise HTTPException(status_code=401, detail='Invalid admin credentials')
+    except Exception as e:
+        print(f"Admin login error: {e}")
+        raise HTTPException(status_code=500, detail='Authentication service error')
+
+# ─────────── Forgot Password Routes ───────────
+class ForgotPasswordReq(BaseModel):
+    email: str
+
+class ResetPasswordReq(BaseModel):
+    token: str
+    new_password: str
+
+@app.post('/api/auth/forgot-password')
+def forgot_password(req: ForgotPasswordReq):
+    """Send password reset email"""
+    try:
+        # Check if user exists
+        user = execute_query('SELECT id, name, email FROM users WHERE email = %s', (req.email,), fetch=True)
+        if not user:
+            # Return success even if user doesn't exist (security)
+            return {'message': 'If this email exists, a password reset link has been sent'}
+        
+        # Generate reset token (valid for 1 hour)
+        reset_token = create_token({
+            'email': req.email,
+            'purpose': 'password_reset',
+            'exp': datetime.utcnow() + timedelta(hours=1)
+        })
+        
+        # Store reset token in database
+        execute_query(
+            'INSERT INTO password_reset_tokens (email, token, expires_at, created_at) VALUES (%s, %s, %s, %s) ON DUPLICATE KEY UPDATE token = VALUES(token), expires_at = VALUES(expires_at), created_at = VALUES(created_at)',
+            (req.email, reset_token, datetime.utcnow() + timedelta(hours=1), datetime.utcnow())
+        )
+        
+        # Send reset email
+        success = send_password_reset_email(user[0]['email'], user[0]['name'], reset_token)
+        
+        return {'message': 'If this email exists, a password reset link has been sent'}
+    except Exception as e:
+        print(f"Forgot password error: {e}")
+        return {'message': 'If this email exists, a password reset link has been sent'}
+
+@app.post('/api/auth/reset-password')
+def reset_password(req: ResetPasswordReq):
+    """Reset password with valid token"""
+    try:
+        # Validate password length
+        if len(req.new_password.encode('utf-8')) > 72:
+            raise HTTPException(status_code=400, detail='Password too long - maximum 72 characters allowed')
+        
+        # Verify reset token
+        try:
+            payload = decode_token(req.token)
+            if payload.get('purpose') != 'password_reset':
+                raise HTTPException(status_code=400, detail='Invalid reset token')
+        except:
+            raise HTTPException(status_code=400, detail='Invalid or expired reset token')
+        
+        email = payload.get('email')
+        
+        # Check token exists in database and is not expired
+        token_record = execute_query(
+            'SELECT * FROM password_reset_tokens WHERE email = %s AND token = %s AND expires_at > %s',
+            (email, req.token, datetime.utcnow()), fetch=True
+        )
+        
+        if not token_record:
+            raise HTTPException(status_code=400, detail='Invalid or expired reset token')
+        
+        # Update user password
+        new_hash = hash_password(req.new_password)
+        execute_query(
+            'UPDATE users SET password_hash = %s WHERE email = %s',
+            (new_hash, email)
+        )
+        
+        # Delete used token
+        execute_query('DELETE FROM password_reset_tokens WHERE email = %s', (email,))
+        
+        return {'message': 'Password reset successfully'}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Reset password error: {e}")
+        raise HTTPException(status_code=500, detail='Password reset failed')
+
+def send_password_reset_email(user_email: str, user_name: str, reset_token: str):
+    """Send password reset email"""
+    smtp_email = os.getenv('SMTP_EMAIL')
+    smtp_pass = os.getenv('SMTP_PASSWORD')
     
-    # Fallback to environment-based admin (for initial setup only)
-    if DEFAULT_ADMIN_EMAIL and req.email == DEFAULT_ADMIN_EMAIL:
-        if DEFAULT_ADMIN_PASSWORD and req.password == DEFAULT_ADMIN_PASSWORD:
-            token = create_token({'sub': 'admin', 'email': DEFAULT_ADMIN_EMAIL, 'name': 'Admin', 'role': 'admin'})
-            return {'token': token, 'name': 'Admin', 'email': DEFAULT_ADMIN_EMAIL}
+    if not smtp_email or not smtp_pass:
+        print("Email credentials not configured - reset email skipped")
+        return False
     
-    raise HTTPException(status_code=401, detail='Invalid admin credentials')
+    try:
+        reset_link = f"https://faq-agent.netlify.app/reset-password?token={reset_token}"
+        
+        msg = MIMEMultipart()
+        msg['From'] = smtp_email
+        msg['To'] = user_email
+        msg['Subject'] = 'Password Reset - Zed AI Support'
+        
+        body = f"""
+Hi {user_name},
+
+You requested a password reset for your Zed AI Support account.
+
+🔐 Reset Your Password:
+Click the link below to reset your password:
+{reset_link}
+
+⏰ This link will expire in 1 hour for security.
+
+If you didn't request this reset, please ignore this email.
+
+Best regards,
+Zed Support Team
+        """
+        
+        msg.attach(MIMEText(body, 'plain'))
+        
+        with smtplib.SMTP('smtp.gmail.com', 587) as server:
+            server.starttls()
+            server.login(smtp_email, smtp_pass)
+            server.sendmail(smtp_email, user_email, msg.as_string())
+        
+        print(f"✅ Password reset email sent to {user_email}")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Password reset email failed: {e}")
+        return False
 
 # ─────────── Chat Routes ───────────
 @app.post('/api/chat')

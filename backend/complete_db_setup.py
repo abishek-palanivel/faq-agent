@@ -80,6 +80,44 @@ try:
         )
     """)
     
+    # Create password reset tokens table
+    print("Creating password_reset_tokens table...")
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS password_reset_tokens (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            email VARCHAR(255) NOT NULL,
+            token TEXT NOT NULL,
+            expires_at DATETIME NOT NULL,
+            created_at DATETIME,
+            UNIQUE KEY unique_email (email)
+        )
+    """)
+    
+    # Create other supporting tables
+    print("Creating conversation_context table...")
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS conversation_context (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            session_id VARCHAR(255) NOT NULL,
+            context_data TEXT,
+            last_topic VARCHAR(255),
+            updated_at DATETIME,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            UNIQUE KEY unique_session (user_id, session_id)
+        )
+    """)
+    
+    print("Creating popular_queries table...")
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS popular_queries (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            query_text VARCHAR(255) NOT NULL,
+            search_count INT DEFAULT 1,
+            UNIQUE KEY unique_query (query_text)
+        )
+    """)
+    
     # Insert sample FAQs
     print("Adding sample FAQ data...")
     sample_faqs = [
@@ -100,6 +138,9 @@ try:
     print("✅ faq_entries table created successfully!")
     print("✅ tickets table created successfully!")
     print("✅ chat_history table created successfully!")
+    print("✅ password_reset_tokens table created successfully!")
+    print("✅ conversation_context table created successfully!")
+    print("✅ popular_queries table created successfully!")
     print("✅ Sample FAQ data inserted!")
     
     cursor.close()

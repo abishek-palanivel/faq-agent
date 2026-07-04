@@ -148,6 +148,8 @@ export default function UserLogin() {
 
         <div className="auth-footer">
           Don't have an account? <Link to="/signup">Sign up</Link>
+          <br />
+          <Link to="/forgot-password" style={{ color: '#64748b', fontSize: '13px' }}>Forgot Password?</Link>
           <br /><br />
           <Link to="/admin/login" style={{ color: '#64748b', fontSize: '12px' }}>Admin Login →</Link>
         </div>

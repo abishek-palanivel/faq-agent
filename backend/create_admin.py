@@ -13,7 +13,9 @@ DB_CONFIG = {
 }
 
 def hash_password(password: str) -> str:
-    """Hash password using bcrypt"""
+    """Hash password using bcrypt - consistent with auth.py"""
+    if len(password.encode('utf-8')) > 72:
+        raise ValueError("Password too long - maximum 72 characters allowed")
     return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
 print("🔑 Creating admin user...")
