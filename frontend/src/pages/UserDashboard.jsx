@@ -131,8 +131,9 @@ export default function UserDashboard() {
       const res = await fetch(`${API}/api/faqs`, { headers: authH() });
       if (res.ok) {
         const data = await res.json();
-        setFaqs(data);
-        setFilteredFaqs(data);
+        const faqsList = data && Array.isArray(data.faqs) ? data.faqs : [];
+        setFaqs(faqsList);
+        setFilteredFaqs(faqsList);
         setDataLoaded(prev => ({ ...prev, faqs: true }));
       }
     } catch (e) {
@@ -142,19 +143,28 @@ export default function UserDashboard() {
 
   // Filter FAQs based on search and category
   useEffect(() => {
+    if (!Array.isArray(faqs)) {
+      setFilteredFaqs([]);
+      return;
+    }
+
     let filtered = faqs;
     
     if (selectedCategory !== 'All') {
-      filtered = filtered.filter(faq => faq.category === selectedCategory);
+      filtered = filtered.filter(faq => faq && faq.category === selectedCategory);
     }
     
     if (faqSearch.trim()) {
       const searchLower = faqSearch.toLowerCase();
-      filtered = filtered.filter(faq =>
-        faq.question.toLowerCase().includes(searchLower) ||
-        faq.answer.toLowerCase().includes(searchLower) ||
-        faq.category.toLowerCase().includes(searchLower)
-      );
+      filtered = filtered.filter(faq => {
+        if (!faq) return false;
+        const question = (faq.question || '').toLowerCase();
+        const answer = (faq.answer || '').toLowerCase();
+        const category = (faq.category || '').toLowerCase();
+        return question.includes(searchLower) || 
+               answer.includes(searchLower) || 
+               category.includes(searchLower);
+      });
     }
     
     setFilteredFaqs(filtered);
@@ -476,7 +486,9 @@ export default function UserDashboard() {
                     </div>
                   )) : (
                     <div className="no-results" style={{textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)'}}>
-                      <p style={{fontSize: '16px', margin: '0 0 16px 0'}}>Loading FAQs...</p>
+                      <p style={{fontSize: '16px', margin: '0 0 16px 0'}}>
+                        {dataLoaded.faqs ? 'No FAQs found matching your criteria.' : 'Loading FAQs...'}
+                      </p>
                     </div>
                   )}
                 </div>
