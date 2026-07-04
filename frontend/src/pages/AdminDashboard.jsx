@@ -260,10 +260,10 @@ export default function AdminDashboard() {
   };
 
   const selectAllTickets = () => {
-    if (selectedTickets.length === tickets.length) {
+    if (Array.isArray(tickets) && selectedTickets.length === tickets.length) {
       setSelectedTickets([]);
     } else {
-      setSelectedTickets(tickets.map(t => t.id));
+      setSelectedTickets(Array.isArray(tickets) ? tickets.map(t => t.id) : []);
     }
   };
 
@@ -450,7 +450,7 @@ export default function AdminDashboard() {
             </div>
 
             <h3 style={{ color: '#fff', fontFamily: 'Outfit', marginBottom: 16, fontSize: 18 }}>Recent Tickets</h3>
-            {tickets.slice(0, 5).map(t => (
+            {Array.isArray(tickets) && tickets.slice(0, 5).map(t => (
               <div key={t.id} className={`ticket-card ${t.is_urgent ? 'urgent' : ''}`}>
                 <div className="ticket-top">
                   <span className="ticket-id-badge">#{t.id} — {t.user_name}</span>
@@ -501,7 +501,7 @@ export default function AdminDashboard() {
             <div className="analytics-section">
               <h3>🔥 Most Popular Queries</h3>
               <div className="popular-queries">
-                {analytics.popular_queries?.length > 0 ? analytics.popular_queries.map((query, idx) => (
+                {Array.isArray(analytics.popular_queries) && analytics.popular_queries.length > 0 ? analytics.popular_queries.map((query, idx) => (
                   <div key={idx} className="query-item">
                     <div className="query-text">"{query.query_text}"</div>
                     <div className="query-count">{query.search_count} searches</div>
@@ -514,13 +514,13 @@ export default function AdminDashboard() {
             <div className="analytics-section">
               <h3>📅 Daily Conversation Volume (Last 7 Days)</h3>
               <div className="chart-container">
-                {analytics.daily_conversations?.length > 0 ? (
+                {Array.isArray(analytics.daily_conversations) && analytics.daily_conversations.length > 0 ? (
                   <div className="simple-bar-chart">
                     {analytics.daily_conversations.map((day, idx) => (
                       <div key={idx} className="chart-bar">
-                        <div className="bar" style={{ height: `${Math.max(day.conversations * 2, 5)}px` }} />
-                        <div className="bar-label">{day.date?.slice(-5)}</div>
-                        <div className="bar-value">{day.conversations}</div>
+                        <div className="bar" style={{ height: `${Math.max((day?.conversations || 0) * 2, 5)}px` }} />
+                        <div className="bar-label">{day?.date?.slice(-5)}</div>
+                        <div className="bar-value">{day?.conversations}</div>
                       </div>
                     ))}
                   </div>
@@ -532,10 +532,10 @@ export default function AdminDashboard() {
             <div className="analytics-section">
               <h3>⭐ Response Rating Distribution</h3>
               <div className="rating-distribution">
-                {analytics.rating_distribution?.length > 0 ? analytics.rating_distribution.map((rating, idx) => (
+                {Array.isArray(analytics.rating_distribution) && analytics.rating_distribution.length > 0 ? analytics.rating_distribution.map((rating, idx) => (
                   <div key={idx} className="rating-item">
-                    <span className="rating-stars">{'⭐'.repeat(rating.rating)}</span>
-                    <span className="rating-count">{rating.count} responses</span>
+                    <span className="rating-stars">{'⭐'.repeat(rating?.rating || 0)}</span>
+                    <span className="rating-count">{rating?.count} responses</span>
                   </div>
                 )) : <p>No rating data available yet.</p>}
               </div>
@@ -545,15 +545,15 @@ export default function AdminDashboard() {
             <div className="analytics-section">
               <h3>🎯 Top Performing FAQs</h3>
               <div className="faq-performance-list">
-                {analytics.faq_performance?.length > 0 ? analytics.faq_performance.map((faq, idx) => (
+                {Array.isArray(analytics.faq_performance) && analytics.faq_performance.length > 0 ? analytics.faq_performance.map((faq, idx) => (
                   <div key={idx} className="faq-performance-item">
                     <div className="faq-performance-text">
-                      <strong>{faq.category}</strong>: {faq.question?.slice(0, 60)}...
+                      <strong>{faq?.category}</strong>: {faq?.question?.slice(0, 60)}...
                     </div>
                     <div className="faq-performance-stats">
-                      <span>👁 {faq.view_count}</span>
-                      <span>👍 {faq.helpful_count}</span>
-                      <span>👎 {faq.not_helpful_count}</span>
+                      <span>👁 {faq?.view_count}</span>
+                      <span>👍 {faq?.helpful_count}</span>
+                      <span>👎 {faq?.not_helpful_count}</span>
                     </div>
                   </div>
                 )) : <p>No FAQ performance data available yet.</p>}
@@ -619,7 +619,7 @@ export default function AdminDashboard() {
               <div className="canned-responses-panel">
                 <h4>Quick Responses</h4>
                 <div className="canned-responses-grid">
-                  {cannedResponses.map(response => (
+                  {Array.isArray(cannedResponses) && cannedResponses.map(response => (
                     <div key={response.id} className="canned-response-item">
                       <div className="response-title">{response.title}</div>
                       <div className="response-category">{response.category}</div>
@@ -639,7 +639,7 @@ export default function AdminDashboard() {
               </div>
             )}
 
-            {tickets.length === 0 ? (
+            {(!Array.isArray(tickets) || tickets.length === 0) ? (
               <div className="empty-state"><div className="icon">✅</div><p>No open tickets. All clear!</p></div>
             ) : (
               <div className="tickets-section">
@@ -722,7 +722,7 @@ export default function AdminDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {users.map((u, i) => (
+                  {Array.isArray(users) && users.map((u, i) => (
                     <tr key={u.id}>
                       <td>{i + 1}</td>
                       <td>
@@ -948,7 +948,7 @@ export default function AdminDashboard() {
 
             {/* FAQ List */}
             <div className="faqs-grid">
-              {adminFaqs.length === 0 ? (
+              {(!Array.isArray(adminFaqs) || adminFaqs.length === 0) ? (
                 <div className="empty-state">
                   <div className="icon">❓</div>
                   <p>No FAQs created yet. Add your first FAQ to get started!</p>

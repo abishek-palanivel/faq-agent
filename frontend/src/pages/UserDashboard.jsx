@@ -112,8 +112,8 @@ export default function UserDashboard() {
     }
   };
 
-  const loadTickets = async () => {
-    if (dataLoaded.tickets) return; // Prevent duplicate calls
+  const loadTickets = async (force = false) => {
+    if (dataLoaded.tickets && force !== true) return; // Prevent duplicate calls unless forced
     
     try {
       const res = await fetch(`${API}/api/user/tickets`, { headers: authH() });
@@ -227,8 +227,8 @@ export default function UserDashboard() {
     nav('/login');
   };
 
-  const categories = ['All', ...new Set(faqs.map(faq => faq.category))];
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const categories = ['All', ...new Set(Array.isArray(faqs) ? faqs.filter(faq => faq && faq.category).map(faq => faq.category) : [])];
+  const unreadCount = Array.isArray(notifications) ? notifications.filter(n => n && !n.read).length : 0;
 
   return (
     <div className="dashboard">
@@ -274,10 +274,7 @@ export default function UserDashboard() {
             onClick={() => { 
               setTab('tickets'); 
               setSidebarOpen(false); 
-              // Only load tickets if not already loaded
-              if (!dataLoaded.tickets) {
-                loadTickets(); 
-              }
+              loadTickets(true); // Force reload tickets on tab change to see admin replies
             }}
           >
             <span>🎫</span>
@@ -429,7 +426,7 @@ export default function UserDashboard() {
                     className="category-select"
                     style={{width: '100%', padding: '12px 16px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text)', fontSize: '14px', outline: 'none', cursor: 'pointer'}}
                   >
-                    {categories.map(cat => (
+                    {Array.isArray(categories) && categories.map(cat => (
                       <option key={cat} value={cat}>{cat}</option>
                     ))}
                   </select>
@@ -438,11 +435,11 @@ export default function UserDashboard() {
 
               <div className="faq-results">
                 <p className="results-count" style={{color: 'var(--text-muted)', fontSize: '13px', margin: '0 0 16px 0'}}>
-                  {filteredFaqs.length} FAQ{filteredFaqs.length !== 1 ? 's' : ''} found
+                  {Array.isArray(filteredFaqs) ? filteredFaqs.length : 0} FAQ{(!Array.isArray(filteredFaqs) || filteredFaqs.length !== 1) ? 's' : ''} found
                 </p>
                 
                 <div className="faq-list">
-                  {filteredFaqs.length > 0 ? filteredFaqs.map((faq, i) => (
+                  {Array.isArray(filteredFaqs) && filteredFaqs.length > 0 ? filteredFaqs.map((faq, i) => (
                     <div key={i} className="faq-item" style={{background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '20px', marginBottom: '16px'}}>
                       <div className="faq-question" style={{marginBottom: '12px'}}>
                         <span className="category-tag" style={{display: 'inline-block', background: 'var(--primary)', color: 'white', padding: '4px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: '600', marginBottom: '8px'}}>{faq.category}</span>
@@ -477,17 +474,26 @@ export default function UserDashboard() {
             <div className="tickets-section" style={{padding: '24px', background: 'var(--bg)', minHeight: '100%'}}>
               <div className="tickets-header" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px'}}>
                 <h2 style={{color: 'var(--text)', margin: 0}}>Your Support Tickets</h2>
-                <button 
-                  className="btn-primary"
-                  onClick={() => setTab('chat')}
-                  style={{background: 'linear-gradient(135deg, var(--primary), var(--secondary))', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer'}}
-                >
-                  Create New Ticket
-                </button>
+                <div style={{display: 'flex', gap: '10px'}}>
+                  <button 
+                    className="btn-secondary"
+                    onClick={() => loadTickets(true)}
+                    style={{padding: '10px 20px', borderRadius: '8px', cursor: 'pointer'}}
+                  >
+                    ↻ Refresh
+                  </button>
+                  <button 
+                    className="btn-primary"
+                    onClick={() => setTab('chat')}
+                    style={{background: 'linear-gradient(135deg, var(--primary), var(--secondary))', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer'}}
+                  >
+                    Create New Ticket
+                  </button>
+                </div>
               </div>
               
               <div className="tickets-list">
-                {tickets.length > 0 ? tickets.map((ticket, i) => (
+                {Array.isArray(tickets) && tickets.length > 0 ? tickets.map((ticket, i) => (
                   <div key={i} className="ticket-card" style={{background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '20px', marginBottom: '16px'}}>
                     <div className="ticket-header" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px'}}>
                       <span className="ticket-id" style={{color: 'var(--primary)', fontWeight: '700', fontSize: '14px'}}>#{ticket.id}</span>
@@ -558,10 +564,10 @@ export default function UserDashboard() {
             <button onClick={() => setShowNotifications(false)}>✕</button>
           </div>
           <div className="notifications-list">
-            {notifications.length > 0 ? notifications.slice(0, 5).map((notif, i) => (
-              <div key={i} className={`notification-item ${!notif.read ? 'unread' : ''}`}>
-                <p>{notif.message}</p>
-                <span>{new Date(notif.created_at).toLocaleDateString()}</span>
+            {Array.isArray(notifications) && notifications.length > 0 ? notifications.slice(0, 5).map((notif, i) => (
+              <div key={i} className={`notification-item ${notif && !notif.read ? 'unread' : ''}`}>
+                <p>{notif?.message}</p>
+                <span>{notif?.created_at ? new Date(notif.created_at).toLocaleDateString() : ''}</span>
               </div>
             )) : (
               <p className="no-notifications">No notifications</p>
