@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 const authH = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('user_token')}` });
 
 export default function UserDashboard() {
@@ -331,55 +331,56 @@ export default function UserDashboard() {
         </header>
 
         {/* Content Area */}
-        <div className="content" style={{background: 'var(--bg)', minHeight: 'calc(100vh - 60px)', display: 'block', position: 'relative'}}>
-          {/* Debug info - ALWAYS SHOW */}
-          <div style={{position: 'fixed', top: '10px', right: '10px', background: 'rgba(255,255,255,0.1)', color: 'white', padding: '8px', zIndex: 9999, fontSize: '12px', borderRadius: '4px'}}>
-            Tab: {tab} | Messages: {messages.length} | Loaded: {JSON.stringify(dataLoaded)}
-          </div>
+        <div className="content">
           
           {/* FORCE RENDER CONTENT BASED ON TAB */}
           {tab === 'chat' ? (
-            <div className="chat-container" style={{background: 'var(--bg)', minHeight: '100%', display: 'flex', flexDirection: 'column'}}>
-              <div className="chat-messages" style={{flex: 1, padding: '24px', background: 'var(--bg)', minHeight: '400px', display: 'flex', flexDirection: 'column'}}>
+            <div className="chat-container">
+              <div className="chat-messages">
                 {messages.length === 0 ? (
-                  <div className="welcome-message" style={{display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center', color: 'var(--text)'}}>
-                    <div className="bot-icon" style={{fontSize: '64px', marginBottom: '20px'}}>🤖</div>
-                    <h3 style={{color: 'var(--text)', fontSize: '24px', marginBottom: '12px'}}>Welcome to Zed AI Support</h3>
-                    <p style={{color: 'var(--text-muted)', fontSize: '16px'}}>Loading your chat experience...</p>
+                  <div className="welcome-message">
+                    <div className="bot-icon">🤖</div>
+                    <h3>Welcome to Zed AI Support</h3>
+                    <p>Ask me anything about your orders, billing, returns, or account settings.</p>
                   </div>
                 ) : (
                   messages.map((msg, i) => (
-                    <div key={i} className={`message ${msg.role}`} style={{marginBottom: '16px', display: 'block'}}>
-                      <div className="message-content" style={{padding: '12px 16px', borderRadius: '16px', background: msg.role === 'user' ? 'linear-gradient(135deg, var(--primary), var(--secondary))' : 'var(--surface)', color: msg.role === 'user' ? 'white' : 'var(--text)', marginBottom: '4px'}}>
-                        {msg.content}
+                    <div key={i} className={`message ${msg.role}`}>
+                      <div className="message-avatar">
+                        {msg.role === 'assistant' ? '🤖' : name.charAt(0).toUpperCase()}
                       </div>
-                      <div className="message-time" style={{fontSize: '11px', color: 'var(--text-dim)'}}>
-                        {new Date(msg.timestamp).toLocaleTimeString()}
-                      </div>
-                      {msg.suggestions && msg.suggestions.length > 0 && (
-                        <div className="message-suggestions" style={{display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap'}}>
-                          {msg.suggestions.slice(0, 3).map((suggestion, idx) => (
-                            <button 
-                              key={idx}
-                              className="suggestion-btn"
-                              onClick={() => sendMessage(suggestion)}
-                              style={{padding: '6px 12px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: '16px', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '12px'}}
-                            >
-                              {suggestion}
-                            </button>
-                          ))}
+                      <div className="message-content-wrapper">
+                        <div className="message-bubble">
+                          {msg.content}
                         </div>
-                      )}
+                        <div className="message-time">
+                          {new Date(msg.timestamp).toLocaleTimeString()}
+                        </div>
+                        {msg.suggestions && msg.suggestions.length > 0 && (
+                          <div className="message-suggestions">
+                            {msg.suggestions.slice(0, 3).map((suggestion, idx) => (
+                              <button 
+                                key={idx}
+                                className="suggestion-btn"
+                                onClick={() => sendMessage(suggestion)}
+                              >
+                                {suggestion}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ))
                 )}
                 
                 {isTyping && (
-                  <div className="message assistant typing" style={{marginBottom: '16px'}}>
-                    <div className="typing-indicator" style={{display: 'flex', gap: '4px', padding: '12px 16px', background: 'var(--surface)', borderRadius: '16px', width: 'fit-content'}}>
-                      <span style={{width: '8px', height: '8px', borderRadius: '50%', background: 'var(--text-muted)', animation: 'typing 1.4s infinite'}}></span>
-                      <span style={{width: '8px', height: '8px', borderRadius: '50%', background: 'var(--text-muted)', animation: 'typing 1.4s infinite', animationDelay: '0.2s'}}></span>
-                      <span style={{width: '8px', height: '8px', borderRadius: '50%', background: 'var(--text-muted)', animation: 'typing 1.4s infinite', animationDelay: '0.4s'}}></span>
+                  <div className="message assistant typing">
+                    <div className="message-avatar">🤖</div>
+                    <div className="typing-indicator">
+                      <span></span>
+                      <span></span>
+                      <span></span>
                     </div>
                   </div>
                 )}
@@ -387,7 +388,7 @@ export default function UserDashboard() {
                 <div ref={endRef} />
               </div>
               
-              <div className="chat-input-container" style={{padding: '20px', borderTop: '1px solid var(--border)', background: 'var(--bg2)', display: 'flex', gap: '12px', alignItems: 'flex-end'}}>
+              <div className="chat-input-container">
                 <textarea
                   ref={inputRef}
                   className="chat-input"
@@ -396,13 +397,11 @@ export default function UserDashboard() {
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
                   rows={1}
-                  style={{flex: 1, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '20px', padding: '12px 16px', color: 'var(--text)', fontSize: '14px', outline: 'none', resize: 'none', minHeight: '20px', maxHeight: '100px', fontFamily: 'inherit', lineHeight: 1.4}}
                 />
                 <button 
                   className="send-btn"
                   onClick={() => sendMessage()}
                   disabled={loading || !input.trim()}
-                  style={{width: '44px', height: '44px', border: 'none', borderRadius: '50%', background: loading || !input.trim() ? 'var(--text-dim)' : 'linear-gradient(135deg, var(--primary), var(--secondary))', color: 'white', cursor: loading || !input.trim() ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px'}}
                 >
                   {loading ? '⏳' : '➤'}
                 </button>
