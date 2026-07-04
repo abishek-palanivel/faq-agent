@@ -193,8 +193,8 @@ class CannedResponse(BaseModel):
 
 # Google OAuth details - Configure in environment variables
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
-GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET')
-GOOGLE_REDIRECT_URI = os.getenv('GOOGLE_REDIRECT_URI', 'http://localhost:8080/api/auth/google/callback')
+GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET')  
+GOOGLE_REDIRECT_URI = os.getenv('GOOGLE_REDIRECT_URI', 'https://faq-agent-1y6i.onrender.com/api/auth/google/callback')
 
 # ─────────── Enhanced Email Notification System ───────────
 def send_email(user_name: str, user_email: str, message: str, ticket_id: int):
@@ -493,7 +493,7 @@ def google_callback(code: str):
     }
     r = requests.post(token_url, data=data)
     if r.status_code != 200:
-        return RedirectResponse(url="http://localhost:5173/login?error=Google+authentication+failed")
+        return RedirectResponse(url="https://faq-agent.netlify.app/login?error=Google+authentication+failed")
     
     token_data = r.json()
     access_token = token_data.get("access_token")
@@ -502,7 +502,7 @@ def google_callback(code: str):
     headers = {"Authorization": f"Bearer {access_token}"}
     r_info = requests.get(info_url, headers=headers)
     if r_info.status_code != 200:
-        return RedirectResponse(url="http://localhost:5173/login?error=Failed+to+fetch+user+info")
+        return RedirectResponse(url="https://faq-agent.netlify.app/login?error=Failed+to+fetch+user+info")
         
     user_info = r_info.json()
     email = user_info.get("email")
@@ -518,7 +518,7 @@ def google_callback(code: str):
         uid = rows[0]['id']
         
     token = create_token({'sub': str(uid), 'email': email, 'name': name, 'role': 'user'})
-    frontend_url = f"http://localhost:5173/login?token={token}&name={name}&email={email}"
+    frontend_url = f"https://faq-agent.netlify.app/login?token={token}&name={name}&email={email}"
     return RedirectResponse(url=frontend_url)
 
 # ─────────── Auth Routes ───────────

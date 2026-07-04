@@ -118,6 +118,86 @@ try:
         )
     """)
     
+    # Create user preferences table
+    print("Creating user_preferences table...")
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_preferences (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            language VARCHAR(10) DEFAULT 'en',
+            notifications_enabled TINYINT(1) DEFAULT 1,
+            email_notifications TINYINT(1) DEFAULT 1,
+            sound_notifications TINYINT(1) DEFAULT 1,
+            push_subscription TEXT,
+            updated_at DATETIME,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            UNIQUE KEY unique_user (user_id)
+        )
+    """)
+    
+    # Create user notifications table
+    print("Creating user_notifications table...")
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_notifications (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            title VARCHAR(255) NOT NULL,
+            message TEXT NOT NULL,
+            ticket_id INT,
+            is_read TINYINT(1) DEFAULT 0,
+            email_sent TINYINT(1) DEFAULT 0,
+            created_at DATETIME,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    """)
+    
+    # Create admin notes table
+    print("Creating admin_notes table...")
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS admin_notes (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            admin_name VARCHAR(255) NOT NULL,
+            note_text TEXT NOT NULL,
+            is_important TINYINT(1) DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    """)
+    
+    # Create chat attachments table
+    print("Creating chat_attachments table...")
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS chat_attachments (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            filename VARCHAR(255) NOT NULL,
+            file_size INT NOT NULL,
+            file_type VARCHAR(100) NOT NULL,
+            file_path TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    """)
+    
+    # Create satisfaction surveys table
+    print("Creating satisfaction_surveys table...")
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS satisfaction_surveys (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            ticket_id INT NOT NULL,
+            satisfaction_rating INT NOT NULL,
+            resolution_rating INT NOT NULL,
+            speed_rating INT NOT NULL,
+            comments TEXT,
+            would_recommend TINYINT(1) DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE
+        )
+    """)
+    
     # Insert sample FAQs
     print("Adding sample FAQ data...")
     sample_faqs = [
@@ -141,6 +221,11 @@ try:
     print("✅ password_reset_tokens table created successfully!")
     print("✅ conversation_context table created successfully!")
     print("✅ popular_queries table created successfully!")
+    print("✅ user_preferences table created successfully!")
+    print("✅ user_notifications table created successfully!")
+    print("✅ admin_notes table created successfully!")
+    print("✅ chat_attachments table created successfully!")
+    print("✅ satisfaction_surveys table created successfully!")
     print("✅ Sample FAQ data inserted!")
     
     cursor.close()
