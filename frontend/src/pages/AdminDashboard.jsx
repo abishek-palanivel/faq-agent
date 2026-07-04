@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -15,6 +15,7 @@ export default function AdminDashboard() {
   const [replyText, setReplyText] = useState('');
   const [selectedTickets, setSelectedTickets] = useState([]);
   const [cannedResponses, setCannedResponses] = useState([]);
+  const [showBulkActions, setShowBulkActions] = useState(false);
   const [showCannedResponses, setShowCannedResponses] = useState(false);
   const [systemStatus, setSystemStatus] = useState({
     database: 'Connected',
@@ -29,7 +30,13 @@ export default function AdminDashboard() {
   
   const nav = useNavigate();
 
-  useEffect(() => { loadStats(); loadTickets(); }, []);
+  useEffect(() => { 
+    const initializeAdmin = async () => {
+      await loadStats(); 
+      await loadTickets();
+    };
+    initializeAdmin();
+  }, []);
 
   // Comprehensive refresh function for current tab
   const refreshCurrentTab = async () => {
@@ -273,13 +280,32 @@ export default function AdminDashboard() {
     loadTickets();
   };
 
-  const handleTabChange = (t) => {
+  const handleTabChange = async (t) => {
+    if (t === tab) return; // Prevent unnecessary reloads
+    
     setTab(t);
-    if (t === 'users') loadUsers();
-    if (t === 'tickets') { loadTickets(); loadCannedResponses(); }
-    if (t === 'overview') loadStats();
-    if (t === 'analytics') loadAnalytics();
-    if (t === 'faqs') loadAdminFaqs();
+    
+    // Load data only when switching to a new tab
+    switch(t) {
+      case 'users':
+        await loadUsers();
+        break;
+      case 'tickets':
+        await Promise.all([loadTickets(), loadCannedResponses()]);
+        break;
+      case 'overview':
+        await Promise.all([loadStats(), loadTickets()]);
+        break;
+      case 'analytics':
+        await loadAnalytics();
+        break;
+      case 'faqs':
+        await loadAdminFaqs();
+        break;
+      case 'settings':
+        await loadSystemStatus();
+        break;
+    }
   };
 
   const logout = () => { 

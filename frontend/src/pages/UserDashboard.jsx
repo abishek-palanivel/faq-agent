@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -30,18 +30,24 @@ export default function UserDashboard() {
     endRef.current?.scrollIntoView({ behavior: 'smooth' }); 
   }, [messages]);
 
-  // Initialize dashboard
+  // Initialize dashboard once
   useEffect(() => {
-    loadInitialData();
-    if (messages.length === 0) {
-      setMessages([{
-        role: 'assistant',
-        content: `Hi ${name}! 👋 I'm your AI assistant. I can help you with questions about orders, billing, returns, account issues, or anything else. What can I help you with today?`,
-        timestamp: new Date().toISOString(),
-        suggestions: ['Check my order status', 'Return an item', 'Billing question', 'Account settings']
-      }]);
-    }
-  }, []);
+    const initializeDashboard = async () => {
+      await loadInitialData();
+      
+      // Only set initial message if no messages exist
+      if (messages.length === 0) {
+        setMessages([{
+          role: 'assistant',
+          content: `Hi ${name}! 👋 I'm your AI assistant. I can help you with questions about orders, billing, returns, account issues, or anything else. What can I help you with today?`,
+          timestamp: new Date().toISOString(),
+          suggestions: ['Check my order status', 'Return an item', 'Billing question', 'Account settings']
+        }]);
+      }
+    };
+    
+    initializeDashboard();
+  }, []); // Empty dependency array to run only once
 
   const loadInitialData = async () => {
     await Promise.all([
@@ -64,7 +70,6 @@ export default function UserDashboard() {
   };
 
   const loadTickets = async () => {
-    if (tab !== 'tickets') return;
     try {
       const res = await fetch(`${API}/api/user/tickets`, { headers: authH() });
       if (res.ok) {
@@ -159,7 +164,7 @@ export default function UserDashboard() {
     }
   };
 
-  const handleKeyPress = (e) => {
+  const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
@@ -203,14 +208,26 @@ export default function UserDashboard() {
           </button>
           <button 
             className={`nav-item ${tab === 'faqs' ? 'active' : ''}`}
-            onClick={() => { setTab('faqs'); setSidebarOpen(false); loadFaqs(); }}
+            onClick={() => { 
+              setTab('faqs'); 
+              setSidebarOpen(false); 
+              if (tab !== 'faqs' && faqs.length === 0) {
+                loadFaqs(); 
+              }
+            }}
           >
             <span>📚</span>
             Browse FAQs
           </button>
           <button 
             className={`nav-item ${tab === 'tickets' ? 'active' : ''}`}
-            onClick={() => { setTab('tickets'); setSidebarOpen(false); loadTickets(); }}
+            onClick={() => { 
+              setTab('tickets'); 
+              setSidebarOpen(false); 
+              if (tab !== 'tickets') {
+                loadTickets(); 
+              }
+            }}
           >
             <span>🎫</span>
             My Tickets
@@ -312,7 +329,7 @@ export default function UserDashboard() {
                   placeholder="Type your message here..."
                   value={input}
                   onChange={e => setInput(e.target.value)}
-                  onKeyPress={handleKeyPress}
+                  onKeyDown={handleKeyDown}
                   rows={1}
                 />
                 <button 
