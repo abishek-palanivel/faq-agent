@@ -61,11 +61,15 @@ export default function UserLogin() {
     try {
       const res = await fetch(`${API}/api/auth/google/url`);
       const data = await res.json();
+      
       if (data.url) {
         window.location.href = data.url;
+      } else {
+        // Handle gracefully when Google OAuth is not available
+        setError(data.message || 'Google sign-in is temporarily unavailable. Please use email/password login.');
       }
     } catch (err) {
-      setError('Failed to initiate Google sign-in');
+      setError('Google sign-in is temporarily unavailable. Please use email/password login.');
     }
   };
 

@@ -153,13 +153,15 @@ export default function UserDashboard() {
     } catch (err) {
       const errorMsg = {
         role: 'assistant',
-        content: `I'm sorry, I'm having trouble connecting right now. Please try again in a moment. Error: ${err.message}`,
+        content: `I'm having trouble connecting right now. Please try again in a moment. ${err.message}`,
         timestamp: new Date().toISOString(),
         error: true
       };
       setMessages(prev => [...prev, errorMsg]);
     } finally {
       setLoading(false);
+      // Focus input after sending
+      setTimeout(() => inputRef.current?.focus(), 100);
     }
   };
 

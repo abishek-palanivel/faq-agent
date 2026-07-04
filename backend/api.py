@@ -476,10 +476,27 @@ def is_escalation(text: str) -> bool:
 # ─────────── Google OAuth Routes ───────────
 @app.get('/api/auth/google/url')
 def get_google_auth_url():
-    if not GOOGLE_CLIENT_ID:
-        raise HTTPException(status_code=501, detail="Google OAuth not configured")
-    url = f"https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id={GOOGLE_CLIENT_ID}&redirect_uri={GOOGLE_REDIRECT_URI}&scope=openid%20profile%20email"
-    return {"url": url}
+    """Get Google OAuth URL - Always return a valid response"""
+    try:
+        if not GOOGLE_CLIENT_ID:
+            # Return a fallback response instead of 501
+            return {
+                "url": None, 
+                "error": "Google OAuth not configured",
+                "message": "Please use email/password login instead"
+            }
+        
+        # Encode the redirect URI properly
+        encoded_redirect = requests.utils.quote(GOOGLE_REDIRECT_URI, safe='')
+        url = f"https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id={GOOGLE_CLIENT_ID}&redirect_uri={encoded_redirect}&scope=openid%20profile%20email"
+        return {"url": url}
+    except Exception as e:
+        print(f"Google OAuth URL error: {e}")
+        return {
+            "url": None,
+            "error": "OAuth service temporarily unavailable", 
+            "message": "Please use email/password login instead"
+        }
 
 @app.get('/api/auth/google/callback')
 def google_callback(code: str):
@@ -664,7 +681,7 @@ def reset_password(req: ResetPasswordReq):
         raise HTTPException(status_code=500, detail='Password reset failed')
 
 def send_password_reset_email(user_email: str, user_name: str, reset_token: str):
-    """Send password reset email"""
+    """Send password reset email with enhanced error handling"""
     smtp_email = os.getenv('SMTP_EMAIL')
     smtp_pass = os.getenv('SMTP_PASSWORD')
     
@@ -699,14 +716,29 @@ Zed Support Team
         
         msg.attach(MIMEText(body, 'plain'))
         
-        with smtplib.SMTP('smtp.gmail.com', 587) as server:
-            server.starttls()
-            server.login(smtp_email, smtp_pass)
-            server.sendmail(smtp_email, user_email, msg.as_string())
+        # Enhanced SMTP connection with better error handling
+        try:
+            # Try with SSL first
+            with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+                server.login(smtp_email, smtp_pass)
+                server.sendmail(smtp_email, user_email, msg.as_string())
+        except Exception as ssl_error:
+            print(f"SSL connection failed: {ssl_error}, trying TLS...")
+            # Fallback to TLS
+            with smtplib.SMTP('smtp.gmail.com', 587) as server:
+                server.starttls()
+                server.login(smtp_email, smtp_pass)
+                server.sendmail(smtp_email, user_email, msg.as_string())
         
         print(f"✅ Password reset email sent to {user_email}")
         return True
         
+    except smtplib.SMTPAuthenticationError:
+        print("❌ SMTP Authentication failed - check email credentials")
+        return False
+    except smtplib.SMTPRecipientsRefused:
+        print(f"❌ Invalid recipient email: {user_email}")
+        return False
     except Exception as e:
         print(f"❌ Password reset email failed: {e}")
         return False

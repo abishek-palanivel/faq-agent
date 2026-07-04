@@ -70,14 +70,60 @@ export default function ForgotPassword() {
               <label>Email Address</label>
               <input 
                 type="email" 
-                placeholder="you@example.com" 
+                placeholder="Enter your email address" 
                 value={email}
                 onChange={e => setEmail(e.target.value)} 
                 required 
+                style={{
+                  width: '100%',
+                  padding: '14px 18px',
+                  fontSize: '16px',
+                  border: '2px solid var(--border)',
+                  borderRadius: '12px',
+                  background: 'var(--card-bg)',
+                  color: 'var(--text)',
+                  transition: 'all 0.3s ease',
+                  marginBottom: '8px'
+                }}
+                onFocus={e => e.target.style.borderColor = '#6366f1'}
+                onBlur={e => e.target.style.borderColor = 'var(--border)'}
               />
+              <small style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '4px', display: 'block' }}>
+                We'll send you a secure link to reset your password
+              </small>
             </div>
-            <button className="btn-primary" disabled={loading}>
-              {loading ? 'Sending...' : 'Send Reset Link'}
+            <button 
+              className="btn-primary" 
+              disabled={loading}
+              style={{
+                width: '100%',
+                padding: '14px',
+                fontSize: '16px',
+                fontWeight: '600',
+                background: loading ? 'var(--text-dim)' : 'linear-gradient(135deg, #6366f1, #a855f7)',
+                border: 'none',
+                borderRadius: '12px',
+                color: 'white',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                transition: 'all 0.3s ease',
+                marginTop: '8px'
+              }}
+            >
+              {loading ? (
+                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                  <div style={{
+                    width: '16px',
+                    height: '16px',
+                    border: '2px solid transparent',
+                    borderTop: '2px solid white',
+                    borderRadius: '50%',
+                    animation: 'spin 1s linear infinite'
+                  }}></div>
+                  Sending Reset Link...
+                </span>
+              ) : (
+                'Send Reset Link'
+              )}
             </button>
           </form>
         ) : (
