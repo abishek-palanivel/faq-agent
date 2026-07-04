@@ -81,28 +81,47 @@ export default function AdminDashboard() {
   };
 
   const loadStats = async () => {
-    const res = await fetch(`${API}/api/admin/stats`, { headers: authH() });
-    if (res.ok) setStats(await res.json());
+    try {
+      const res = await fetch(`${API}/api/admin/stats`, { headers: authH() });
+      if (res.ok) setStats(await res.json());
+    } catch (e) { console.error('Failed to load stats:', e); }
   };
 
   const loadAnalytics = async () => {
-    const res = await fetch(`${API}/api/admin/analytics`, { headers: authH() });
-    if (res.ok) setAnalytics(await res.json());
+    try {
+      const res = await fetch(`${API}/api/admin/analytics`, { headers: authH() });
+      if (res.ok) setAnalytics(await res.json());
+    } catch (e) { console.error('Failed to load analytics:', e); }
   };
 
   const loadTickets = async () => {
-    const res = await fetch(`${API}/api/admin/tickets`, { headers: authH() });
-    if (res.ok) setTickets(await res.json());
+    try {
+      const res = await fetch(`${API}/api/admin/tickets`, { headers: authH() });
+      if (res.ok) {
+        const data = await res.json();
+        setTickets(Array.isArray(data) ? data : []);
+      }
+    } catch (e) { console.error('Failed to load tickets:', e); }
   };
 
   const loadUsers = async () => {
-    const res = await fetch(`${API}/api/admin/users`, { headers: authH() });
-    if (res.ok) setUsers(await res.json());
+    try {
+      const res = await fetch(`${API}/api/admin/users`, { headers: authH() });
+      if (res.ok) {
+        const data = await res.json();
+        setUsers(Array.isArray(data) ? data : []);
+      }
+    } catch (e) { console.error('Failed to load users:', e); }
   };
 
   const loadAdminFaqs = async () => {
-    const res = await fetch(`${API}/api/admin/faqs`, { headers: authH() });
-    if (res.ok) setAdminFaqs(await res.json());
+    try {
+      const res = await fetch(`${API}/api/admin/faqs`, { headers: authH() });
+      if (res.ok) {
+        const data = await res.json();
+        setAdminFaqs(Array.isArray(data) ? data : []);
+      }
+    } catch (e) { console.error('Failed to load FAQs:', e); }
   };
 
   const createOrUpdateFaq = async () => {
@@ -131,8 +150,13 @@ export default function AdminDashboard() {
   };
 
   const loadCannedResponses = async () => {
-    const res = await fetch(`${API}/api/admin/canned-responses`, { headers: authH() });
-    if (res.ok) setCannedResponses(await res.json());
+    try {
+      const res = await fetch(`${API}/api/admin/canned-responses`, { headers: authH() });
+      if (res.ok) {
+        const data = await res.json();
+        setCannedResponses(Array.isArray(data) ? data : []);
+      }
+    } catch (e) { console.error('Failed to load canned responses:', e); }
   };
 
   const handleBulkOperation = async (operation) => {
@@ -331,7 +355,7 @@ export default function AdminDashboard() {
     nav('/admin/login'); 
   };
 
-  const urgentCount = tickets.filter(t => t.is_urgent).length;
+  const urgentCount = Array.isArray(tickets) ? tickets.filter(t => t && t.is_urgent).length : 0;
 
   return (
     <div className="dashboard">
@@ -382,18 +406,18 @@ export default function AdminDashboard() {
           <button className={`nav-btn ${tab === 'tickets' ? 'active' : ''}`} onClick={() => handleTabChange('tickets')}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
             Tickets
-            {tickets.length > 0 && <span className="nav-badge">{tickets.length}</span>}
+            {Array.isArray(tickets) && tickets.length > 0 && <span className="nav-badge">{tickets.length}</span>}
             {urgentCount > 0 && <span className="nav-badge urgent">{urgentCount} 🚨</span>}
           </button>
           <button className={`nav-btn ${tab === 'users' ? 'active' : ''}`} onClick={() => handleTabChange('users')}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
             Users
-            {users.length > 0 && <span className="nav-badge">{users.length}</span>}
+            {Array.isArray(users) && users.length > 0 && <span className="nav-badge">{users.length}</span>}
           </button>
           <button className={`nav-btn ${tab === 'faqs' ? 'active' : ''}`} onClick={() => handleTabChange('faqs')}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6m11-7h-6m-6 0H1"/></svg>
             Manage FAQs
-            {adminFaqs.length > 0 && <span className="nav-badge">{adminFaqs.length}</span>}
+            {Array.isArray(adminFaqs) && adminFaqs.length > 0 && <span className="nav-badge">{adminFaqs.length}</span>}
           </button>
           <button className={`nav-btn ${tab === 'settings' ? 'active' : ''}`} onClick={() => handleTabChange('settings')}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6m11-7h-6m-6 0H1"/></svg>
