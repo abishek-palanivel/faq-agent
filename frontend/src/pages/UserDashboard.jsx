@@ -275,12 +275,6 @@ export default function UserDashboard() {
     
     return null; // No instant response available
   };
-        role: 'assistant',
-        content: '❌ Sorry, I encountered an error. Please try again or contact support if the problem persists.',
-        timestamp: new Date().toISOString()
-      }]);
-    }
-  };
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
