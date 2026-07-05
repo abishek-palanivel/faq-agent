@@ -15,7 +15,6 @@ export default function AdminDashboard() {
   const [replyText, setReplyText] = useState('');
   const [selectedTickets, setSelectedTickets] = useState([]);
   const [cannedResponses, setCannedResponses] = useState([]);
-  const [showBulkActions, setShowBulkActions] = useState(false);
   const [showCannedResponses, setShowCannedResponses] = useState(false);
   const [systemStatus, setSystemStatus] = useState({
     database: 'Connected',
@@ -165,8 +164,19 @@ export default function AdminDashboard() {
       return;
     }
 
+    const operationNames = {
+      'resolve': 'resolve',
+      'mark_urgent': 'mark as urgent',
+      'delete': 'delete'
+    };
+    
+    const confirmMessage = `Are you sure you want to ${operationNames[operation]} ${selectedTickets.length} ticket(s)?`;
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+
     try {
-      await fetch(`${API}/api/admin/bulk-operations`, {
+      const response = await fetch(`${API}/api/admin/bulk-operations`, {
         method: 'POST',
         headers: authH(),
         body: JSON.stringify({
@@ -175,11 +185,18 @@ export default function AdminDashboard() {
         })
       });
       
-      setSelectedTickets([]);
-      setShowBulkActions(false);
-      loadTickets();
+      if (response.ok) {
+        alert(`✅ Successfully ${operationNames[operation]}d ${selectedTickets.length} ticket(s)`);
+        setSelectedTickets([]);
+        loadTickets();
+        loadStats();
+      } else {
+        const error = await response.json();
+        alert(`❌ Bulk operation failed: ${error.detail || 'Unknown error'}`);
+      }
     } catch (e) {
       console.error('Bulk operation failed:', e);
+      alert('❌ Bulk operation failed. Please try again.');
     }
   };
 
@@ -292,29 +309,99 @@ export default function AdminDashboard() {
   };
 
   const deleteTicket = async (id) => {
-    await fetch(`${API}/api/admin/tickets/${id}`, { method: 'DELETE', headers: authH() });
-    loadTickets(); loadStats();
+    if (!confirm('Are you sure you want to delete this ticket? This action cannot be undone.')) {
+      return;
+    }
+    
+    try {
+      const response = await fetch(`${API}/api/admin/tickets/${id}`, { 
+        method: 'DELETE', 
+        headers: authH() 
+      });
+      
+      if (response.ok) {
+        alert('✅ Ticket deleted successfully');
+        loadTickets(); 
+        loadStats();
+      } else {
+        const error = await response.json();
+        alert(`❌ Failed to delete ticket: ${error.detail || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Delete error:', error);
+      alert('❌ Failed to delete ticket. Please try again.');
+    }
   };
 
   const toggleUrgent = async (id) => {
-    await fetch(`${API}/api/admin/tickets/${id}/urgent`, { method: 'PATCH', headers: authH() });
-    loadTickets(); loadStats();
+    try {
+      const response = await fetch(`${API}/api/admin/tickets/${id}/urgent`, { 
+        method: 'PATCH', 
+        headers: authH() 
+      });
+      
+      if (response.ok) {
+        loadTickets(); 
+        loadStats();
+      } else {
+        const error = await response.json();
+        alert(`❌ Failed to update ticket priority: ${error.detail || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Toggle urgent error:', error);
+      alert('❌ Failed to update ticket priority. Please try again.');
+    }
   };
 
   const updateStatus = async (id, status) => {
-    await fetch(`${API}/api/admin/tickets/${id}/status`, {
-      method: 'PATCH', headers: authH(), body: JSON.stringify({ status })
-    });
-    loadTickets(); loadStats();
+    try {
+      const response = await fetch(`${API}/api/admin/tickets/${id}/status`, {
+        method: 'PATCH', 
+        headers: authH(), 
+        body: JSON.stringify({ status })
+      });
+      
+      if (response.ok) {
+        alert(`✅ Ticket marked as ${status}`);
+        loadTickets(); 
+        loadStats();
+      } else {
+        const error = await response.json();
+        alert(`❌ Failed to update ticket status: ${error.detail || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Update status error:', error);
+      alert('❌ Failed to update ticket status. Please try again.');
+    }
   };
 
   const sendReply = async () => {
-    if (!replyText.trim()) return;
-    await fetch(`${API}/api/admin/tickets/${replyTarget}/reply`, {
-      method: 'POST', headers: authH(), body: JSON.stringify({ reply: replyText })
-    });
-    setReplyTarget(null); setReplyText('');
-    loadTickets();
+    if (!replyText.trim()) {
+      alert('Please enter a reply message');
+      return;
+    }
+    
+    try {
+      const response = await fetch(`${API}/api/admin/tickets/${replyTarget}/reply`, {
+        method: 'POST', 
+        headers: authH(), 
+        body: JSON.stringify({ reply: replyText })
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        alert('✅ Reply sent successfully! The user has been notified via email and dashboard.');
+        setReplyTarget(null); 
+        setReplyText('');
+        loadTickets(); // Refresh tickets to show the reply
+      } else {
+        const error = await response.json();
+        alert(`❌ Failed to send reply: ${error.detail || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Reply error:', error);
+      alert('❌ Failed to send reply. Please check your connection and try again.');
+    }
   };
 
   const handleTabChange = async (t) => {
@@ -484,7 +571,10 @@ export default function AdminDashboard() {
                     {t.is_urgent ? <span className="urgent-badge">🚨 Urgent</span> : null}
                   </div>
                 </div>
-                <p className="ticket-msg">"{t.message}"</p>
+                <div className="ticket-content">
+                  <h4 className="ticket-subject" style={{color: 'var(--text)', fontSize: '14px', fontWeight: '600', margin: '0 0 6px 0'}}>{t.subject || 'Support Request'}</h4>
+                  <p className="ticket-msg">"{t.message}"</p>
+                </div>
                 <span className="ticket-time">{t.user_email} · {t.created_at}</span>
               </div>
             ))}
@@ -699,7 +789,10 @@ export default function AdminDashboard() {
                     <div style={{ marginBottom: 6 }}>
                       <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>👤 {t.user_name} · {t.user_email}</span>
                     </div>
-                    <p className="ticket-msg">"{t.message}"</p>
+                    <div className="ticket-content">
+                      <h4 className="ticket-subject" style={{color: 'var(--text)', fontSize: '14px', fontWeight: '600', margin: '0 0 6px 0'}}>{t.subject || 'Support Request'}</h4>
+                      <p className="ticket-msg">"{t.message}"</p>
+                    </div>
                     <span className="ticket-time">{t.created_at}</span>
 
                     {t.admin_reply && (

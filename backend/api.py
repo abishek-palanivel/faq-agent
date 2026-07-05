@@ -174,6 +174,11 @@ class ChatReq(BaseModel):
 class ReplyReq(BaseModel):
     reply: str
 
+class CreateTicketReq(BaseModel):
+    subject: str
+    message: str
+    is_urgent: bool = False
+
 class StatusReq(BaseModel):
     status: str
 
@@ -497,9 +502,9 @@ def handle_quick_action(action: str, user_data: dict, action_data: dict = None):
     if action in ['cancel_subscription', 'request_refund', 'schedule_callback', 'live_agent']:
         try:
             ticket_id = execute_query(
-                'INSERT INTO tickets (user_id, user_name, user_email, message, status) VALUES (%s, %s, %s, %s, %s)',
+                'INSERT INTO tickets (user_id, user_name, user_email, subject, message, status) VALUES (%s, %s, %s, %s, %s, %s)',
                 (user_data.get('sub'), user_data.get('name'), user_data.get('email'), 
-                 f'Quick Action: {action} - {json.dumps(action_data or {})}', 'Open')
+                 f'Quick Action Request: {action}', f'Quick Action: {action} - {json.dumps(action_data or {})}', 'Open')
             )
             response += f' Ticket #{ticket_id} has been created for follow-up.'
         except:
@@ -826,8 +831,8 @@ def chat(req: ChatReq, user=Depends(get_user_from_token)):
             try:
                 # Create support ticket immediately
                 ticket_id = execute_query(
-                    'INSERT INTO tickets (user_id, user_name, user_email, message, status, is_urgent, created_at) VALUES (%s, %s, %s, %s, %s, %s, %s)',
-                    (uid, user['name'], user['email'], f"Human Support Request: {message}", 'Open', 1, datetime.now())
+                    'INSERT INTO tickets (user_id, user_name, user_email, subject, message, status, is_urgent, created_at) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)',
+                    (uid, user['name'], user['email'], "Human Support Request", f"Human Support Request: {message}", 'Open', 1, datetime.now())
                 )
                 
                 # Send email notification to admin (don't wait for it)
@@ -1872,7 +1877,7 @@ def get_history(user=Depends(get_user_from_token)):
 @app.get('/api/user/tickets')
 def get_my_tickets(user=Depends(get_user_from_token)):
     rows = execute_query(
-        'SELECT id, message, status, is_urgent, admin_reply, reply_timestamp, created_at FROM tickets WHERE user_id = %s ORDER BY created_at DESC',
+        'SELECT id, subject, message, status, is_urgent, admin_reply, reply_timestamp, created_at FROM tickets WHERE user_id = %s ORDER BY created_at DESC',
         (int(user['sub']),), fetch=True
     )
     for r in rows:
@@ -1881,6 +1886,42 @@ def get_my_tickets(user=Depends(get_user_from_token)):
         if r.get('created_at') and hasattr(r['created_at'], 'strftime'):
             r['created_at'] = r['created_at'].strftime('%Y-%m-%d %H:%M:%S')
     return rows
+
+@app.post('/api/user/tickets')
+def create_ticket(req: CreateTicketReq, user=Depends(get_user_from_token)):
+    """Create a new support ticket manually"""
+    try:
+        # Create the ticket
+        ticket_id = execute_query(
+            'INSERT INTO tickets (user_id, user_name, user_email, subject, message, status, is_urgent, created_at) VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())',
+            (
+                int(user['sub']),
+                user['name'],
+                user['email'],
+                req.subject,
+                req.message,
+                'Open',
+                req.is_urgent
+            )
+        )
+        
+        # Notify admins about the new ticket
+        send_real_time_notification(
+            user_id=int(user['sub']),
+            title='Support Ticket Created',
+            message=f'Your support ticket #{ticket_id} has been created successfully. Our team will respond within 24 hours.',
+            ticket_id=ticket_id
+        )
+        
+        return {
+            'success': True,
+            'ticket_id': ticket_id,
+            'message': f'Support ticket #{ticket_id} created successfully. You will receive updates via email and notifications.'
+        }
+        
+    except Exception as e:
+        print(f"Ticket creation error: {e}")
+        raise HTTPException(status_code=500, detail=f'Failed to create ticket: {str(e)}')
 
 # ─────────── Admin Routes ───────────
 @app.get('/api/admin/stats')

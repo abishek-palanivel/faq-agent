@@ -16,6 +16,8 @@ export default function UserDashboard() {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [notifications, setNotifications] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showCreateTicket, setShowCreateTicket] = useState(false);
+  const [newTicket, setNewTicket] = useState({ subject: '', message: '', is_urgent: false });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [dataLoaded, setDataLoaded] = useState({
@@ -121,6 +123,36 @@ export default function UserDashboard() {
       }
     } catch (e) {
       console.log('Failed to load tickets:', e);
+    }
+  };
+
+  const createTicket = async () => {
+    if (!newTicket.subject.trim() || !newTicket.message.trim()) {
+      alert('Please fill in both subject and message');
+      return;
+    }
+    
+    try {
+      const response = await fetch(`${API}/api/user/tickets`, {
+        method: 'POST',
+        headers: authH(),
+        body: JSON.stringify(newTicket)
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        alert(`✅ Ticket #${result.ticket_id} created successfully! You'll receive updates via email and notifications.`);
+        setShowCreateTicket(false);
+        setNewTicket({ subject: '', message: '', is_urgent: false });
+        loadTickets(true); // Refresh tickets list
+        loadNotifications(); // Refresh notifications
+      } else {
+        const error = await response.json();
+        alert(`❌ Failed to create ticket: ${error.detail || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Create ticket error:', error);
+      alert('❌ Failed to create ticket. Please check your connection and try again.');
     }
   };
 
@@ -437,9 +469,28 @@ export default function UserDashboard() {
             <button 
               className="notifications-btn"
               onClick={() => setShowNotifications(!showNotifications)}
+              style={{position: 'relative'}}
             >
               🔔
-              {unreadCount > 0 && <span className="notification-badge">{unreadCount}</span>}
+              {unreadCount > 0 && (
+                <span style={{
+                  position: 'absolute', 
+                  top: '-2px', 
+                  right: '-2px', 
+                  background: '#ef4444', 
+                  color: 'white', 
+                  borderRadius: '50%', 
+                  width: '18px', 
+                  height: '18px', 
+                  fontSize: '10px', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  fontWeight: '600'
+                }}>
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
             </button>
             
             <div className="user-menu" onClick={logout}>
@@ -610,7 +661,7 @@ export default function UserDashboard() {
                   </button>
                   <button 
                     className="btn-primary"
-                    onClick={() => setTab('chat')}
+                    onClick={() => setShowCreateTicket(true)}
                     style={{background: 'linear-gradient(135deg, var(--primary), var(--secondary))', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer'}}
                   >
                     Create New Ticket
@@ -623,15 +674,41 @@ export default function UserDashboard() {
                   <div key={i} className="ticket-card" style={{background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '20px', marginBottom: '16px'}}>
                     <div className="ticket-header" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px'}}>
                       <span className="ticket-id" style={{color: 'var(--primary)', fontWeight: '700', fontSize: '14px'}}>#{ticket.id}</span>
-                      <span className={`status-badge ${ticket.status?.toLowerCase()}`} style={{padding: '4px 12px', borderRadius: '12px', fontSize: '11px', fontWeight: '600', textTransform: 'uppercase'}}>
-                        {ticket.status}
-                      </span>
+                      <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
+                        {ticket.admin_reply && (
+                          <span className="reply-badge" style={{background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', padding: '4px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: '600'}}>
+                            ✅ REPLIED
+                          </span>
+                        )}
+                        <span className={`status-badge ${ticket.status?.toLowerCase()}`} style={{padding: '4px 12px', borderRadius: '12px', fontSize: '11px', fontWeight: '600', textTransform: 'uppercase'}}>
+                          {ticket.status}
+                        </span>
+                      </div>
                     </div>
                     <div className="ticket-content">
                       <h4 style={{color: 'var(--text)', fontSize: '16px', fontWeight: '600', margin: '0 0 8px 0'}}>{ticket.subject || 'Support Request'}</h4>
-                      <p style={{color: 'var(--text-muted)', fontSize: '14px', lineHeight: 1.5, margin: '0 0 12px 0'}}>{ticket.message?.substring(0, 100)}...</p>
+                      <div style={{marginBottom: '12px'}}>
+                        <h5 style={{color: 'var(--text-muted)', fontSize: '13px', fontWeight: '600', margin: '0 0 4px 0'}}>Your Message:</h5>
+                        <p style={{color: 'var(--text-muted)', fontSize: '14px', lineHeight: 1.5, margin: '0 0 12px 0', padding: '12px', background: 'var(--bg)', borderRadius: '8px', border: '1px solid var(--border)'}}>{ticket.message}</p>
+                      </div>
+                      
+                      {ticket.admin_reply && (
+                        <div style={{marginBottom: '12px'}}>
+                          <h5 style={{color: 'var(--primary)', fontSize: '13px', fontWeight: '600', margin: '0 0 4px 0', display: 'flex', alignItems: 'center', gap: '6px'}}>
+                            💬 Admin Reply:
+                            <span style={{color: 'var(--text-dim)', fontSize: '11px', fontWeight: '400'}}>
+                              {ticket.reply_timestamp && new Date(ticket.reply_timestamp).toLocaleString()}
+                            </span>
+                          </h5>
+                          <div style={{background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(5, 150, 105, 0.1))', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '8px', padding: '12px'}}>
+                            <p style={{color: 'var(--text)', fontSize: '14px', lineHeight: 1.5, margin: '0'}}>{ticket.admin_reply}</p>
+                          </div>
+                        </div>
+                      )}
+                      
                       <div className="ticket-meta" style={{fontSize: '12px', color: 'var(--text-dim)'}}>
                         <span>Created: {new Date(ticket.created_at).toLocaleDateString()}</span>
+                        {ticket.is_urgent && <span style={{color: '#ef4444', marginLeft: '12px'}}>🚨 Urgent</span>}
                       </div>
                     </div>
                   </div>
@@ -692,12 +769,95 @@ export default function UserDashboard() {
           <div className="notifications-list">
             {Array.isArray(notifications) && notifications.length > 0 ? notifications.slice(0, 5).map((notif, i) => (
               <div key={i} className={`notification-item ${notif && !notif.read ? 'unread' : ''}`}>
-                <p>{notif?.message}</p>
-                <span>{notif?.created_at ? new Date(notif.created_at).toLocaleDateString() : ''}</span>
+                <div style={{display: 'flex', alignItems: 'flex-start', gap: '8px'}}>
+                  {notif.ticket_id && <span style={{fontSize: '16px'}}>🎫</span>}
+                  <div style={{flex: 1}}>
+                    <h5 style={{margin: '0 0 4px 0', fontSize: '13px', fontWeight: '600', color: 'var(--text)'}}>{notif.title || 'Notification'}</h5>
+                    <p style={{margin: 0, fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.4}}>{notif?.message}</p>
+                    {notif.ticket_id && (
+                      <button 
+                        onClick={() => {
+                          setTab('tickets');
+                          setShowNotifications(false);
+                          loadTickets(true);
+                        }}
+                        style={{marginTop: '6px', padding: '4px 8px', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '4px', fontSize: '11px', cursor: 'pointer'}}
+                      >
+                        View Ticket #{notif.ticket_id}
+                      </button>
+                    )}
+                    <div style={{fontSize: '10px', color: 'var(--text-dim)', marginTop: '4px'}}>
+                      {notif?.created_at ? new Date(notif.created_at).toLocaleDateString() : ''}
+                    </div>
+                  </div>
+                </div>
               </div>
             )) : (
               <p className="no-notifications">No notifications</p>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Create Ticket Modal */}
+      {showCreateTicket && (
+        <div className="modal-overlay" onClick={() => setShowCreateTicket(false)} style={{position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0, 0, 0, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000}}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{background: 'var(--surface)', borderRadius: '12px', padding: '24px', width: '90%', maxWidth: '500px', border: '1px solid var(--border)'}}>
+            <div className="modal-header" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px'}}>
+              <h3 style={{color: 'var(--text)', margin: 0, fontSize: '18px', fontWeight: '600'}}>🎫 Create New Support Ticket</h3>
+              <button onClick={() => setShowCreateTicket(false)} style={{background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '20px', padding: '0', width: '24px', height: '24px'}}>✕</button>
+            </div>
+            
+            <div className="modal-content" style={{marginBottom: '20px'}}>
+              <div style={{marginBottom: '16px'}}>
+                <label style={{display: 'block', color: 'var(--text)', fontSize: '14px', fontWeight: '500', marginBottom: '6px'}}>Subject *</label>
+                <input 
+                  type="text" 
+                  placeholder="Brief description of your issue"
+                  value={newTicket.subject}
+                  onChange={e => setNewTicket({...newTicket, subject: e.target.value})}
+                  style={{width: '100%', padding: '12px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text)', fontSize: '14px', outline: 'none'}}
+                />
+              </div>
+              
+              <div style={{marginBottom: '16px'}}>
+                <label style={{display: 'block', color: 'var(--text)', fontSize: '14px', fontWeight: '500', marginBottom: '6px'}}>Message *</label>
+                <textarea 
+                  rows="5"
+                  placeholder="Describe your issue in detail..."
+                  value={newTicket.message}
+                  onChange={e => setNewTicket({...newTicket, message: e.target.value})}
+                  style={{width: '100%', padding: '12px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text)', fontSize: '14px', outline: 'none', resize: 'vertical', minHeight: '100px'}}
+                />
+              </div>
+              
+              <div style={{marginBottom: '16px'}}>
+                <label style={{display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer'}}>
+                  <input 
+                    type="checkbox"
+                    checked={newTicket.is_urgent}
+                    onChange={e => setNewTicket({...newTicket, is_urgent: e.target.checked})}
+                  />
+                  <span style={{color: 'var(--text)', fontSize: '14px'}}>🚨 Mark as urgent (requires immediate attention)</span>
+                </label>
+              </div>
+            </div>
+            
+            <div className="modal-actions" style={{display: 'flex', gap: '12px', justifyContent: 'flex-end'}}>
+              <button 
+                onClick={() => setShowCreateTicket(false)}
+                style={{padding: '10px 20px', background: 'transparent', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text)', cursor: 'pointer', fontSize: '14px'}}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={createTicket}
+                disabled={!newTicket.subject.trim() || !newTicket.message.trim()}
+                style={{padding: '10px 20px', background: 'linear-gradient(135deg, var(--primary), var(--secondary))', color: 'white', border: 'none', borderRadius: '8px', cursor: newTicket.subject.trim() && newTicket.message.trim() ? 'pointer' : 'not-allowed', fontSize: '14px', opacity: newTicket.subject.trim() && newTicket.message.trim() ? 1 : 0.6}}
+              >
+                Create Ticket
+              </button>
+            </div>
           </div>
         </div>
       )}

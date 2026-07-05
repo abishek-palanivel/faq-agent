@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS tickets (
     user_id INT,
     user_name VARCHAR(255),
     user_email VARCHAR(255),
+    subject VARCHAR(255),
     message TEXT NOT NULL,
     status ENUM('Open', 'In Progress', 'Resolved') DEFAULT 'Open',
     is_urgent TINYINT(1) DEFAULT 0,
