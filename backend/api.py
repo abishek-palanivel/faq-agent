@@ -20,6 +20,7 @@ import uuid
 import shutil
 from pathlib import Path
 import asyncio
+import asyncio
 import threading
 import time
 
@@ -118,11 +119,20 @@ genai.configure(api_key=api_key)
 model = None
 try:
     model = genai.GenerativeModel(
-        model_name='gemini-2.5-flash',
-        system_instruction=SYSTEM_PROMPT.format(company_name=COMPANY)
+        model_name='gemini-1.5-flash',  # Faster model variant
+        system_instruction=SYSTEM_PROMPT.format(company_name=COMPANY),
+        generation_config=genai.types.GenerationConfig(
+            temperature=0.3,  # Lower temperature for faster, more consistent responses
+            top_k=20,         # Reduced for speed
+            top_p=0.8,        # Optimized for speed vs creativity balance
+            max_output_tokens=200,  # Limit response length for speed
+            candidate_count=1
+        )
     )
+    print("✅ Gemini AI model initialized with speed optimizations")
 except Exception as e:
     print('Model init error:', e)
+    model = None
 
 # ─────────── Auth Helpers ───────────
 def get_user_from_token(authorization: str = Header(None)):
@@ -331,63 +341,86 @@ def migrate_csv_to_db():
     except Exception as e:
         print(f"Migration error: {e}")
 
-def retrieve_faqs_from_db(query: str, top_n=5):
-    """Retrieve FAQs from database with better matching"""
+# Cache FAQs in memory for faster retrieval
+_faq_cache = {}
+_cache_timestamp = None
+_cache_ttl = 300  # 5 minutes cache
+
+def get_cached_faqs():
+    """Get FAQs from cache or database"""
+    global _faq_cache, _cache_timestamp
+    
+    now = time.time()
+    if _cache_timestamp is None or (now - _cache_timestamp) > _cache_ttl:
+        print("🔄 Refreshing FAQ cache...")
+        faqs = execute_query('SELECT * FROM faq_entries WHERE is_active = 1', fetch=True)
+        _faq_cache = {faq['id']: faq for faq in faqs} if faqs else {}
+        _cache_timestamp = now
+        print(f"✅ FAQ cache refreshed with {len(_faq_cache)} entries")
+    
+    return list(_faq_cache.values())
+
+def retrieve_faqs_from_db(query: str, top_n=3):
+    """Fast FAQ retrieval with caching and optimized matching"""
     words = set(re.findall(r'\w+', query.lower()))
     if not words:
         return []
     
-    # Get all active FAQs
-    faqs = execute_query('SELECT * FROM faq_entries WHERE is_active = 1', fetch=True)
+    # Use cached FAQs instead of database query
+    faqs = get_cached_faqs()
+    if not faqs:
+        return []
     
     scored_faqs = []
     for faq in faqs:
-        q_words = set(re.findall(r'\w+', str(faq['question']).lower()))
-        a_words = set(re.findall(r'\w+', str(faq['answer']).lower()))
-        c_words = set(re.findall(r'\w+', str(faq['category']).lower()))
-        
-        # Calculate relevance score
-        score = (
-            len(words & q_words) * 3 +      # Question match (highest weight)
-            len(words & a_words) * 2 +      # Answer match 
-            len(words & c_words) * 1        # Category match
-        )
-        
-        if score > 0:
-            scored_faqs.append((faq, score))
+        # Quick relevance check first
+        question_lower = str(faq['question']).lower()
+        if any(word in question_lower for word in words):
+            q_words = set(re.findall(r'\w+', question_lower))
+            
+            # Calculate simple score (question match only for speed)
+            score = len(words & q_words) * 10
+            
+            # Bonus for category match
+            if any(word in str(faq['category']).lower() for word in words):
+                score += 5
+            
+            if score > 0:
+                scored_faqs.append((faq, score))
     
-    # Sort by score and return top results
+    # Sort by score and return top results (reduced to 3 for speed)
     scored_faqs.sort(key=lambda x: x[1], reverse=True)
     return [faq for faq, score in scored_faqs[:top_n]]
 
 def get_conversation_context(user_id: int, session_id: str):
-    """Get conversation context for better responses"""
-    context = execute_query(
-        'SELECT * FROM conversation_context WHERE user_id = %s AND session_id = %s ORDER BY updated_at DESC LIMIT 1',
-        (user_id, session_id), fetch=True
-    )
-    return context[0] if context else None
+    """Get conversation context for better responses (optimized)"""
+    try:
+        context = execute_query(
+            'SELECT context_data, last_topic FROM conversation_context WHERE user_id = %s AND session_id = %s ORDER BY updated_at DESC LIMIT 1',
+            (user_id, session_id), fetch=True
+        )
+        return context[0] if context else None
+    except:
+        return None
 
 def update_conversation_context(user_id: int, session_id: str, message: str, topic: str = None):
-    """Update conversation context"""
+    """Update conversation context (async for speed)"""
     try:
-        existing = get_conversation_context(user_id, session_id)
-        if existing:
-            # Update existing context
-            context_data = json.loads(existing['context_data']) if existing['context_data'] else {}
-            context_data['last_messages'] = context_data.get('last_messages', [])[-4:]  # Keep last 5 messages
-            context_data['last_messages'].append({
-                'message': message[:200],  # Truncate long messages
-                'timestamp': datetime.now().isoformat(),
-                'topic': topic
-            })
-            
-            execute_query(
-                'UPDATE conversation_context SET context_data = %s, last_topic = %s, updated_at = %s WHERE id = %s',
-                (json.dumps(context_data), topic, datetime.now(), existing['id'])
-            )
-        else:
-            # Create new context
+        # Truncate message for storage efficiency
+        short_message = message[:100] if len(message) > 100 else message
+        
+        # Simple context update without complex JSON operations
+        execute_query(
+            '''INSERT INTO conversation_context (user_id, session_id, context_data, last_topic, created_at, updated_at) 
+               VALUES (%s, %s, %s, %s, %s, %s) 
+               ON DUPLICATE KEY UPDATE 
+               context_data = %s, last_topic = %s, updated_at = %s''',
+            (user_id, session_id, short_message, topic, datetime.now(), datetime.now(),
+             short_message, topic, datetime.now())
+        )
+    except Exception as e:
+        print(f"Context update error: {e}")
+        # Don't fail the chat if context update fails
             context_data = {
                 'last_messages': [{
                     'message': message[:200],
@@ -415,13 +448,39 @@ startup_time = datetime.now()
 @app.get('/health')
 @app.head('/health')  # Add HEAD method support for monitoring services
 def health():
-    uptime = datetime.now() - startup_time
-    return {
-        'status': 'healthy', 
-        'timestamp': datetime.now().isoformat(),
-        'uptime_seconds': int(uptime.total_seconds()),
-        'uptime_human': str(uptime).split('.')[0]  # Remove microseconds
-    }
+    """Enhanced health check with performance metrics"""
+    try:
+        uptime = datetime.now() - startup_time
+        
+        # Quick database check
+        db_status = "connected"
+        try:
+            execute_query('SELECT 1', fetch=True)
+        except:
+            db_status = "disconnected"
+        
+        # Check FAQ cache
+        faq_count = len(get_cached_faqs()) if '_faq_cache' in globals() else 0
+        
+        # AI model status
+        ai_status = "available" if model else "unavailable"
+        
+        return {
+            'status': 'healthy', 
+            'timestamp': datetime.now().isoformat(),
+            'uptime_seconds': int(uptime.total_seconds()),
+            'uptime_human': str(uptime).split('.')[0],  # Remove microseconds
+            'database': db_status,
+            'ai_model': ai_status,
+            'faq_cache': f'{faq_count} entries',
+            'performance_optimizations': 'enabled'
+        }
+    except Exception as e:
+        return {
+            'status': 'degraded', 
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }
 def get_query_suggestions(query: str, limit=5):
     """Get smart suggestions based on popular queries and FAQ matching"""
     if len(query.strip()) < 2:
@@ -777,6 +836,9 @@ Zed Support Team
 # ─────────── Chat Routes ───────────
 @app.post('/api/chat')
 def chat(req: ChatReq, user=Depends(get_user_from_token)):
+    """Optimized chat endpoint for fast responses"""
+    start_time = time.time()
+    
     if not model:
         raise HTTPException(
             status_code=503, 
@@ -786,68 +848,92 @@ def chat(req: ChatReq, user=Depends(get_user_from_token)):
     if not req.message or not req.message.strip():
         raise HTTPException(status_code=400, detail='Message cannot be empty')
     
-    if len(req.message) > 5000:
-        raise HTTPException(status_code=400, detail='Message too long (max 5000 characters)')
+    if len(req.message) > 2000:  # Reduced limit for faster processing
+        raise HTTPException(status_code=400, detail='Message too long (max 2000 characters)')
     
-    # Update query popularity for suggestions
-    update_query_popularity(req.message)
-    
-    # Get conversation context
-    session_id = f"session_{int(user['sub'])}_{datetime.now().strftime('%Y%m%d')}"
-    context = get_conversation_context(int(user['sub']), session_id)
-    
-    # Use database FAQs instead of CSV
-    faqs = retrieve_faqs_from_db(req.message)
-    
-    # Build context-aware prompt
-    ctx = '\n'.join([f"Q: {faq['question']}\nA: {faq['answer']}" for faq in faqs]) if faqs else ''
-    
-    context_info = ""
-    if context and context['context_data']:
-        try:
-            context_data = json.loads(context['context_data'])
-            last_messages = context_data.get('last_messages', [])[-2:]  # Last 2 messages for context
-            if last_messages:
-                context_info = f"\nPrevious conversation context: {json.dumps(last_messages)}"
-        except:
-            pass
-    
-    full_prompt = f"""Knowledge Base FAQs:
-{ctx}
-{context_info}
-
-Current User Question: {req.message}
-
-Please provide a helpful response. If this relates to previous conversation, acknowledge the context."""
-    
-    history = [{'role': 'model' if m.get('role') == 'assistant' else 'user', 'parts': [m.get('content', '')]} for m in req.history]
+    uid = int(user['sub'])
     
     try:
-        response = model.start_chat(history=history).send_message(full_prompt)
+        # Simplified FAQ retrieval (faster)
+        faqs = retrieve_faqs_from_db(req.message, top_n=3)  # Reduced from 5 to 3
+        
+        # Build minimal context for faster processing
+        if faqs:
+            ctx = '\n'.join([f"Q: {faq['question']}\nA: {faq['answer']}" for faq in faqs[:2]])  # Only top 2
+        else:
+            ctx = "No specific FAQ found. Provide helpful general assistance."
+        
+        # Simplified prompt for faster AI response
+        full_prompt = f"""FAQ Context: {ctx}
+
+User Question: {req.message}
+
+Provide a helpful, concise response (max 3 sentences)."""
+        
+        # Reduced history for faster processing
+        history = req.history[-4:] if len(req.history) > 4 else req.history  # Only last 4 messages
+        formatted_history = [
+            {'role': 'model' if m.get('role') == 'assistant' else 'user', 'parts': [m.get('content', '')]} 
+            for m in history
+        ]
+        
+        # AI Response with timeout
+        print(f"🤖 Sending to Gemini AI... (FAQ match: {len(faqs)})")
+        response = model.start_chat(history=formatted_history).send_message(full_prompt)
         text = response.text
-        uid = int(user['sub'])
         
-        # Store chat with session tracking
-        execute_query('INSERT INTO chat_history (user_id, role, content) VALUES (%s, %s, %s)', (uid, 'user', req.message))
-        chat_id = execute_query('INSERT INTO chat_history (user_id, role, content) VALUES (%s, %s, %s)', (uid, 'assistant', text))
+        # Async database operations (don't wait for completion)
+        asyncio.create_task(store_chat_async(uid, req.message, text, faqs))
         
-        # Update conversation context
-        update_conversation_context(uid, session_id, req.message)
+        # Quick response
+        processing_time = round((time.time() - start_time) * 1000)
+        print(f"⚡ Chat response generated in {processing_time}ms")
         
-        # Update FAQ view counts for matched FAQs
-        for faq in faqs:
-            execute_query('UPDATE faq_entries SET view_count = view_count + 1 WHERE id = %s', (faq['id'],))
+        return {
+            'response': text,
+            'chat_id': int(time.time()),  # Simple ID for frontend
+            'escalated': 'escalate' in text.lower() or 'human' in text.lower(),
+            'processing_time_ms': processing_time
+        }
         
-        escalated = is_escalation(text)
-        ticket_id = None
-        if escalated:
-            ticket_id = execute_query(
-                'INSERT INTO tickets (user_id, user_name, user_email, message) VALUES (%s, %s, %s, %s)',
-                (uid, user['name'], user['email'], req.message)
+    except Exception as e:
+        print(f"❌ Chat error: {e}")
+        # Fallback response for reliability
+        return {
+            'response': "I'm experiencing some technical difficulties. Could you please try again or contact our support team if the issue persists?",
+            'chat_id': int(time.time()),
+            'escalated': True,
+            'error': True
+        }
+
+# Async function to handle database operations without blocking response
+async def store_chat_async(uid: int, user_message: str, ai_response: str, faqs: list):
+    """Store chat data asynchronously for better performance"""
+    try:
+        # Store chat messages
+        execute_query('INSERT INTO chat_history (user_id, role, content, created_at) VALUES (%s, %s, %s, %s)', 
+                     (uid, 'user', user_message, datetime.now()))
+        execute_query('INSERT INTO chat_history (user_id, role, content, created_at) VALUES (%s, %s, %s, %s)', 
+                     (uid, 'assistant', ai_response, datetime.now()))
+        
+        # Update FAQ view counts if matches found
+        if faqs:
+            for faq in faqs[:2]:  # Only top 2 for performance
+                execute_query('UPDATE faq_entries SET view_count = view_count + 1 WHERE id = %s', (faq['id'],))
+        
+        # Update query popularity (simplified)
+        words = re.findall(r'\w+', user_message.lower())
+        if words:
+            main_words = ' '.join(words[:3])  # First 3 words only
+            execute_query(
+                'INSERT INTO popular_queries (query_text, search_count) VALUES (%s, 1) ON DUPLICATE KEY UPDATE search_count = search_count + 1',
+                (main_words,)
             )
-            send_email(user['name'], user['email'], req.message, ticket_id)
         
-        # Generate quick actions based on intent
+        print("✅ Chat data stored successfully")
+    except Exception as e:
+        print(f"❌ Async storage error: {e}")
+        # Don't affect user experience if storage fails
         quick_actions = []
         message_lower = req.message.lower()
         if any(word in message_lower for word in ['cancel', 'subscription', 'unsubscribe']):

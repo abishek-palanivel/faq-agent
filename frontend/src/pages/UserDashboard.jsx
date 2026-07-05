@@ -184,39 +184,68 @@ export default function UserDashboard() {
     setLoading(true);
     setIsTyping(true);
 
+    // Start timer to show estimated response time
+    const startTime = Date.now();
+    let responseTimer = setTimeout(() => {
+      if (loading) {
+        console.log('⏱️ Response taking longer than expected...');
+      }
+    }, 3000);
+
     try {
-      // Only send last 6 messages as context to keep request fast
-      const recentHistory = messages.slice(-6).map(m => ({
+      // Minimal context for faster processing - only last 4 messages
+      const recentHistory = messages.slice(-4).map(m => ({
         role: m.role,
-        content: m.content
+        content: m.content.slice(0, 500) // Truncate long messages for speed
       }));
+      
+      // Optimized fetch with shorter timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
       
       const res = await fetch(`${API}/api/chat`, {
         method: 'POST',
         headers: authH(),
+        signal: controller.signal,
         body: JSON.stringify({
-          message: messageText.trim(),
+          message: messageText.trim().slice(0, 1000), // Limit message length for speed
           history: recentHistory
         })
       });
 
-      if (!res.ok) throw new Error('Failed to send message');
+      clearTimeout(timeoutId);
+      clearTimeout(responseTimer);
+
+      if (!res.ok) throw new Error(`Server error: ${res.status}`);
       
       const data = await res.json();
+      const responseTime = Date.now() - startTime;
       
-      // Show response immediately — no artificial delay
+      console.log(`⚡ Response received in ${responseTime}ms`);
+      
+      // Show response immediately with performance info
       setIsTyping(false);
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: data.response,
         timestamp: new Date().toISOString(),
-        suggestions: data.suggestions || []
+        suggestions: data.suggestions || [],
+        responseTime: responseTime
       }]);
       setLoading(false);
 
     } catch (error) {
+      clearTimeout(responseTimer);
       setIsTyping(false);
       setLoading(false);
+      
+      console.error('Chat error:', error);
+      
+      // Better error handling with retry option
+      const errorMessage = error.name === 'AbortError' 
+        ? 'Response timed out. Please try a shorter message or try again.'
+        : 'Sorry, I encountered an issue. Please try again.';
+      
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: '❌ Sorry, I encountered an error. Please try again or contact support if the problem persists.',
