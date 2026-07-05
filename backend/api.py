@@ -341,86 +341,46 @@ def migrate_csv_to_db():
     except Exception as e:
         print(f"Migration error: {e}")
 
-# Cache FAQs in memory for faster retrieval
-_faq_cache = {}
-_cache_timestamp = None
-_cache_ttl = 300  # 5 minutes cache
-
-def get_cached_faqs():
-    """Get FAQs from cache or database"""
-    global _faq_cache, _cache_timestamp
-    
-    now = time.time()
-    if _cache_timestamp is None or (now - _cache_timestamp) > _cache_ttl:
-        print("🔄 Refreshing FAQ cache...")
-        faqs = execute_query('SELECT * FROM faq_entries WHERE is_active = 1', fetch=True)
-        _faq_cache = {faq['id']: faq for faq in faqs} if faqs else {}
-        _cache_timestamp = now
-        print(f"✅ FAQ cache refreshed with {len(_faq_cache)} entries")
-    
-    return list(_faq_cache.values())
-
-def retrieve_faqs_from_db(query: str, top_n=3):
-    """Fast FAQ retrieval with caching and optimized matching"""
-    words = set(re.findall(r'\w+', query.lower()))
-    if not words:
+# Simplified FAQ system - no complex caching
+def get_simple_faqs():
+    """Simple FAQ retrieval without caching complications"""
+    try:
+        faqs = execute_query('SELECT * FROM faq_entries WHERE is_active = 1 LIMIT 20', fetch=True)
+        return faqs if faqs else []
+    except:
         return []
-    
-    # Use cached FAQs instead of database query
-    faqs = get_cached_faqs()
-    if not faqs:
+
+def retrieve_faqs_from_db(query: str, top_n=2):
+    """Simple, fast FAQ retrieval without complex caching"""
+    try:
+        words = re.findall(r'\w+', query.lower())
+        if not words:
+            return []
+        
+        # Get simple FAQ list
+        faqs = get_simple_faqs()
+        if not faqs:
+            return []
+        
+        matched_faqs = []
+        for faq in faqs:
+            # Simple keyword matching
+            question_lower = str(faq['question']).lower()
+            if any(word in question_lower for word in words):
+                matched_faqs.append(faq)
+        
+        return matched_faqs[:top_n]
+    except Exception as e:
+        print(f"FAQ retrieval error: {e}")
         return []
-    
-    scored_faqs = []
-    for faq in faqs:
-        # Quick relevance check first
-        question_lower = str(faq['question']).lower()
-        if any(word in question_lower for word in words):
-            q_words = set(re.findall(r'\w+', question_lower))
-            
-            # Calculate simple score (question match only for speed)
-            score = len(words & q_words) * 10
-            
-            # Bonus for category match
-            if any(word in str(faq['category']).lower() for word in words):
-                score += 5
-            
-            if score > 0:
-                scored_faqs.append((faq, score))
-    
-    # Sort by score and return top results (reduced to 3 for speed)
-    scored_faqs.sort(key=lambda x: x[1], reverse=True)
-    return [faq for faq, score in scored_faqs[:top_n]]
 
 def get_conversation_context(user_id: int, session_id: str):
-    """Get conversation context for better responses (optimized)"""
-    try:
-        context = execute_query(
-            'SELECT context_data, last_topic FROM conversation_context WHERE user_id = %s AND session_id = %s ORDER BY updated_at DESC LIMIT 1',
-            (user_id, session_id), fetch=True
-        )
-        return context[0] if context else None
-    except:
-        return None
+    """Simple conversation context (disabled for reliability)"""
+    return None
 
 def update_conversation_context(user_id: int, session_id: str, message: str, topic: str = None):
-    """Update conversation context (async for speed)"""
-    try:
-        # Truncate message for storage efficiency
-        short_message = message[:100] if len(message) > 100 else message
-        
-        # Simple context update without complex JSON operations
-        execute_query(
-            '''INSERT INTO conversation_context (user_id, session_id, context_data, last_topic, created_at, updated_at) 
-               VALUES (%s, %s, %s, %s, %s, %s) 
-               ON DUPLICATE KEY UPDATE 
-               context_data = %s, last_topic = %s, updated_at = %s''',
-            (user_id, session_id, short_message, topic, datetime.now(), datetime.now(),
-             short_message, topic, datetime.now())
-        )
-    except Exception as e:
-        print(f"Context update error: {e}")
-        # Don't fail the chat if context update fails
+    """Simple context update (disabled for reliability)"""
+    pass
             context_data = {
                 'last_messages': [{
                     'message': message[:200],
@@ -448,19 +408,16 @@ startup_time = datetime.now()
 @app.get('/health')
 @app.head('/health')  # Add HEAD method support for monitoring services
 def health():
-    """Enhanced health check with performance metrics"""
+    """Simple, reliable health check"""
     try:
         uptime = datetime.now() - startup_time
         
-        # Quick database check
+        # Simple database check
         db_status = "connected"
         try:
             execute_query('SELECT 1', fetch=True)
         except:
             db_status = "disconnected"
-        
-        # Check FAQ cache
-        faq_count = len(get_cached_faqs()) if '_faq_cache' in globals() else 0
         
         # AI model status
         ai_status = "available" if model else "unavailable"
@@ -469,11 +426,9 @@ def health():
             'status': 'healthy', 
             'timestamp': datetime.now().isoformat(),
             'uptime_seconds': int(uptime.total_seconds()),
-            'uptime_human': str(uptime).split('.')[0],  # Remove microseconds
+            'uptime_human': str(uptime).split('.')[0],
             'database': db_status,
-            'ai_model': ai_status,
-            'faq_cache': f'{faq_count} entries',
-            'performance_optimizations': 'enabled'
+            'ai_model': ai_status
         }
     except Exception as e:
         return {
@@ -836,104 +791,107 @@ Zed Support Team
 # ─────────── Chat Routes ───────────
 @app.post('/api/chat')
 def chat(req: ChatReq, user=Depends(get_user_from_token)):
-    """Optimized chat endpoint for fast responses"""
-    start_time = time.time()
-    
-    if not model:
-        raise HTTPException(
-            status_code=503, 
-            detail='AI service temporarily unavailable. Please check your Gemini API key configuration.'
-        )
-    
-    if not req.message or not req.message.strip():
-        raise HTTPException(status_code=400, detail='Message cannot be empty')
-    
-    if len(req.message) > 2000:  # Reduced limit for faster processing
-        raise HTTPException(status_code=400, detail='Message too long (max 2000 characters)')
-    
-    uid = int(user['sub'])
-    
+    """Ultra-fast, bulletproof chat endpoint"""
     try:
-        # Simplified FAQ retrieval (faster)
-        faqs = retrieve_faqs_from_db(req.message, top_n=3)  # Reduced from 5 to 3
+        # Basic validation
+        if not req.message or not req.message.strip():
+            raise HTTPException(status_code=400, detail='Message cannot be empty')
         
-        # Build minimal context for faster processing
-        if faqs:
-            ctx = '\n'.join([f"Q: {faq['question']}\nA: {faq['answer']}" for faq in faqs[:2]])  # Only top 2
-        else:
-            ctx = "No specific FAQ found. Provide helpful general assistance."
+        if len(req.message) > 1000:
+            raise HTTPException(status_code=400, detail='Message too long')
         
-        # Simplified prompt for faster AI response
-        full_prompt = f"""FAQ Context: {ctx}
-
-User Question: {req.message}
-
-Provide a helpful, concise response (max 3 sentences)."""
+        # Check if AI model is available
+        if not model:
+            return {
+                'response': "I'm currently experiencing technical difficulties. Please try again in a moment or contact our support team for immediate assistance.",
+                'chat_id': int(time.time()),
+                'escalated': True
+            }
         
-        # Reduced history for faster processing
-        history = req.history[-4:] if len(req.history) > 4 else req.history  # Only last 4 messages
-        formatted_history = [
-            {'role': 'model' if m.get('role') == 'assistant' else 'user', 'parts': [m.get('content', '')]} 
-            for m in history
-        ]
+        uid = int(user['sub'])
+        message = req.message.strip()
         
-        # AI Response with timeout
-        print(f"🤖 Sending to Gemini AI... (FAQ match: {len(faqs)})")
-        response = model.start_chat(history=formatted_history).send_message(full_prompt)
-        text = response.text
+        # Fast FAQ lookup - use simple keyword matching
+        response_text = get_fast_response(message)
         
-        # Async database operations (don't wait for completion)
-        asyncio.create_task(store_chat_async(uid, req.message, text, faqs))
+        if not response_text:
+            # Fallback to AI with minimal prompt
+            try:
+                simple_prompt = f"User asks: {message}\n\nProvide a helpful, brief response (max 2 sentences):"
+                
+                # Use basic chat without history for speed
+                ai_response = model.generate_content(simple_prompt)
+                response_text = ai_response.text
+                
+            except Exception as ai_error:
+                print(f"AI error: {ai_error}")
+                # Ultimate fallback
+                response_text = "I'm having trouble processing your request right now. Please try again or contact our support team for immediate assistance."
         
-        # Quick response
-        processing_time = round((time.time() - start_time) * 1000)
-        print(f"⚡ Chat response generated in {processing_time}ms")
+        # Store in background (don't wait)
+        try:
+            execute_query('INSERT INTO chat_history (user_id, role, content, created_at) VALUES (%s, %s, %s, %s)', 
+                         (uid, 'user', message, datetime.now()))
+            execute_query('INSERT INTO chat_history (user_id, role, content, created_at) VALUES (%s, %s, %s, %s)', 
+                         (uid, 'assistant', response_text, datetime.now()))
+        except:
+            pass  # Don't fail if storage fails
         
         return {
-            'response': text,
-            'chat_id': int(time.time()),  # Simple ID for frontend
-            'escalated': 'escalate' in text.lower() or 'human' in text.lower(),
-            'processing_time_ms': processing_time
+            'response': response_text,
+            'chat_id': int(time.time()),
+            'escalated': False
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"❌ Chat error: {e}")
-        # Fallback response for reliability
+        print(f"Chat error: {e}")
         return {
-            'response': "I'm experiencing some technical difficulties. Could you please try again or contact our support team if the issue persists?",
+            'response': "I apologize, but I'm experiencing some technical difficulties. Please try again or contact our support team.",
             'chat_id': int(time.time()),
             'escalated': True,
             'error': True
         }
 
-# Async function to handle database operations without blocking response
-async def store_chat_async(uid: int, user_message: str, ai_response: str, faqs: list):
-    """Store chat data asynchronously for better performance"""
-    try:
-        # Store chat messages
-        execute_query('INSERT INTO chat_history (user_id, role, content, created_at) VALUES (%s, %s, %s, %s)', 
-                     (uid, 'user', user_message, datetime.now()))
-        execute_query('INSERT INTO chat_history (user_id, role, content, created_at) VALUES (%s, %s, %s, %s)', 
-                     (uid, 'assistant', ai_response, datetime.now()))
-        
-        # Update FAQ view counts if matches found
-        if faqs:
-            for faq in faqs[:2]:  # Only top 2 for performance
-                execute_query('UPDATE faq_entries SET view_count = view_count + 1 WHERE id = %s', (faq['id'],))
-        
-        # Update query popularity (simplified)
-        words = re.findall(r'\w+', user_message.lower())
-        if words:
-            main_words = ' '.join(words[:3])  # First 3 words only
-            execute_query(
-                'INSERT INTO popular_queries (query_text, search_count) VALUES (%s, 1) ON DUPLICATE KEY UPDATE search_count = search_count + 1',
-                (main_words,)
-            )
-        
-        print("✅ Chat data stored successfully")
-    except Exception as e:
-        print(f"❌ Async storage error: {e}")
-        # Don't affect user experience if storage fails
+def get_fast_response(message: str):
+    """Super fast response lookup using simple keyword matching"""
+    message_lower = message.lower()
+    
+    # Common questions with instant responses
+    quick_responses = {
+        'hello': "Hi! I'm your AI assistant. I can help you with questions about orders, billing, returns, account issues, or anything else. What can I help you with today?",
+        'hi': "Hello! I'm here to help you with any questions about our services. What do you need assistance with?",
+        'help': "I'm here to help! You can ask me about:\n• Order tracking and delivery\n• Billing and payment issues\n• Returns and refunds\n• Account management\n• Product information\n\nWhat would you like to know?",
+        'track': "To track your order:\n1. Check your email for a tracking link\n2. Go to your account dashboard > Order History\n3. If you can't find it, I can help you locate your order details.",
+        'return': "You can return unopened items within 30 days of delivery for a full refund. Visit our Returns Center online with your order number and email to generate a prepaid shipping label.",
+        'refund': "Refunds are processed within 3-5 business days once we receive your return. It may take an additional 5-7 days for the amount to reflect in your account.",
+        'payment': "We accept Visa, Mastercard, American Express, PayPal, and Apple Pay. All transactions are secured with 256-bit SSL encryption.",
+        'password': "To reset your password, click the 'Forgot Password' link on the login page and enter your registered email address to receive a reset link.",
+        'cancel': "You can cancel your order within 1 hour of placing it from your account. After 1 hour, the order is processed and cannot be cancelled.",
+        'shipping': "Standard delivery takes 5-7 business days. Express delivery is 1-2 business days. International shipping takes 10-15 business days.",
+        'support': "Our support team is available Monday through Friday from 9 AM to 6 PM EST. You can also use this live chat for immediate assistance!",
+    }
+    
+    # Check for keyword matches
+    for keyword, response in quick_responses.items():
+        if keyword in message_lower:
+            return response
+    
+    # Check for order-related queries
+    if any(word in message_lower for word in ['order', 'delivery', 'package', 'shipped']):
+        return "For order-related questions: You can track your order using the tracking link in your email, or check your account dashboard under 'Order History'. If you need specific help with an order, I can assist you further."
+    
+    # Check for billing queries
+    if any(word in message_lower for word in ['billing', 'charge', 'payment', 'credit card']):
+        return "For billing questions: You can update your payment information in Account Settings > Billing. If you see unexpected charges or need a receipt, I can help you with that. What specific billing issue can I assist with?"
+    
+    return None  # No quick match found, use AI
+
+# Remove async function that was causing issues
+# async def store_chat_async(uid: int, user_message: str, ai_response: str, faqs: list):
+#     """This was causing errors on Render.com - removed"""
+#     pass
         quick_actions = []
         message_lower = req.message.lower()
         if any(word in message_lower for word in ['cancel', 'subscription', 'unsubscribe']):
@@ -2043,6 +2001,32 @@ def toggle_urgent(ticket_id: int, admin=Depends(get_admin_from_token)):
     execute_query('UPDATE tickets SET is_urgent=NOT is_urgent WHERE id=%s', (ticket_id,))
     return {'message': 'Urgent toggled'}
 
-@app.get('/api/health')
-def health():
-    return {'status': 'ok', 'service': 'Zed AI API'}
+@app.get('/api/test-chat')
+def test_chat():
+    """Simple test endpoint to verify chat system"""
+    try:
+        # Test basic components
+        result = {
+            'status': 'ok',
+            'ai_model': 'available' if model else 'unavailable',
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        # Test FAQ system
+        try:
+            test_faqs = get_simple_faqs()
+            result['faq_count'] = len(test_faqs)
+        except Exception as e:
+            result['faq_error'] = str(e)
+        
+        # Test AI response
+        if model:
+            try:
+                test_response = model.generate_content("Say hello")
+                result['ai_test'] = 'pass'
+            except Exception as e:
+                result['ai_error'] = str(e)
+        
+        return result
+    except Exception as e:
+        return {'status': 'error', 'error': str(e)}

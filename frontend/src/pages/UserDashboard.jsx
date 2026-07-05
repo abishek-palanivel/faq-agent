@@ -184,69 +184,97 @@ export default function UserDashboard() {
     setLoading(true);
     setIsTyping(true);
 
-    // Start timer to show estimated response time
-    const startTime = Date.now();
-    let responseTimer = setTimeout(() => {
-      if (loading) {
-        console.log('⏱️ Response taking longer than expected...');
-      }
-    }, 3000);
+    // Check for instant responses first (offline capability)
+    const instantResponse = getInstantResponse(messageText.trim());
+    if (instantResponse) {
+      setTimeout(() => {
+        setIsTyping(false);
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: instantResponse,
+          timestamp: new Date().toISOString(),
+          instant: true
+        }]);
+        setLoading(false);
+      }, 500); // Small delay to feel natural
+      return;
+    }
 
     try {
-      // Minimal context for faster processing - only last 4 messages
-      const recentHistory = messages.slice(-4).map(m => ({
+      // Minimal context for speed - only last 2 messages
+      const recentHistory = messages.slice(-2).map(m => ({
         role: m.role,
-        content: m.content.slice(0, 500) // Truncate long messages for speed
+        content: m.content.slice(0, 300) // Truncate for speed
       }));
-      
-      // Optimized fetch with shorter timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
       
       const res = await fetch(`${API}/api/chat`, {
         method: 'POST',
         headers: authH(),
-        signal: controller.signal,
         body: JSON.stringify({
-          message: messageText.trim().slice(0, 1000), // Limit message length for speed
+          message: messageText.trim(),
           history: recentHistory
         })
       });
 
-      clearTimeout(timeoutId);
-      clearTimeout(responseTimer);
-
-      if (!res.ok) throw new Error(`Server error: ${res.status}`);
+      if (!res.ok) {
+        throw new Error(`Server responded with ${res.status}`);
+      }
       
       const data = await res.json();
-      const responseTime = Date.now() - startTime;
       
-      console.log(`⚡ Response received in ${responseTime}ms`);
-      
-      // Show response immediately with performance info
       setIsTyping(false);
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: data.response,
         timestamp: new Date().toISOString(),
-        suggestions: data.suggestions || [],
-        responseTime: responseTime
+        escalated: data.escalated
       }]);
       setLoading(false);
 
     } catch (error) {
-      clearTimeout(responseTimer);
       setIsTyping(false);
       setLoading(false);
       
       console.error('Chat error:', error);
       
-      // Better error handling with retry option
-      const errorMessage = error.name === 'AbortError' 
-        ? 'Response timed out. Please try a shorter message or try again.'
-        : 'Sorry, I encountered an issue. Please try again.';
+      // Smart error handling with helpful messages
+      let errorMessage = "I'm having trouble connecting right now. ";
+      
+      if (error.message.includes('Failed to fetch')) {
+        errorMessage += "Please check your internet connection and try again.";
+      } else if (error.message.includes('500')) {
+        errorMessage += "Our servers are experiencing high load. Please try again in a moment.";
+      } else {
+        errorMessage += "Please try again or contact our support team if this continues.";
+      }
       
       setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: `❌ ${errorMessage}`,
+        timestamp: new Date().toISOString(),
+        error: true
+      }]);
+    }
+  };
+
+  // Instant responses for common queries (works offline)
+  const getInstantResponse = (message) => {
+    const msg = message.toLowerCase();
+    
+    if (msg.includes('hello') || msg.includes('hi') || msg === 'hey') {
+      return "Hi! 👋 I'm your AI assistant. I can help you with questions about orders, billing, returns, account issues, or anything else. What can I help you with today?";
+    }
+    
+    if (msg.includes('help') || msg === '?') {
+      return "I'm here to help! 🤝 You can ask me about:\n\n• 📦 Order tracking and delivery\n• 💳 Billing and payment issues\n• 🔄 Returns and refunds\n• 👤 Account management\n• 📋 Product information\n\nWhat would you like to know?";
+    }
+    
+    if (msg.includes('thank')) {
+      return "You're welcome! 😊 Is there anything else I can help you with today?";
+    }
+    
+    return null; // No instant response available
+  };
         role: 'assistant',
         content: '❌ Sorry, I encountered an error. Please try again or contact support if the problem persists.',
         timestamp: new Date().toISOString()
