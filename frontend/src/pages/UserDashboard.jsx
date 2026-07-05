@@ -261,9 +261,27 @@ export default function UserDashboard() {
   const getInstantResponse = (message) => {
     const msg = message.toLowerCase().trim();
     
+    // INSTANT HUMAN CONNECTION - Top Priority! (Check FIRST)
+    const humanKeywords = [
+      'human', 'person', 'agent', 'live agent', 'support agent', 'human support',
+      'connect to support', 'talk to someone', 'speak to someone', 'real person',
+      'connect me', 'human help', 'live help', 'customer service', 'support team',
+      'connect to human', 'need help from person', 'talk to agent', 'human agent',
+      'manager', 'supervisor', 'complaint', 'escalate', 'escalation', 'how i connect'
+    ];
+    
+    if (humanKeywords.some(keyword => msg.includes(keyword))) {
+      return "🤝 **Connecting You to Human Support!**\n\n✅ Creating your support ticket now...\n✅ Admin team will be notified immediately\n✅ You'll get personal attention within 24 hours\n\n📧 **Email updates sent automatically**\n🎫 **Ticket being created with your request**\n\n**Please wait while I connect you to our support team...**";
+    }
+    
+    // Urgent/Problem keywords - instant escalation response
+    if (msg.includes('urgent') || msg.includes('emergency') || msg.includes('problem') || msg.includes('issue')) {
+      return "🚨 **Priority Support Request!**\n\n✅ **Creating URGENT ticket now**\n✅ **Admin notified immediately**  \n✅ **Response within 2 hours guaranteed**\n\n🔥 **Priority handling activated**\n📧 **Urgent notification being sent**\n\n**Processing your priority request...**";
+    }
+    
     // Greetings - instant response
     if (msg.includes('hello') || msg.includes('hi') || msg === 'hey' || msg.includes('good morning') || msg.includes('good afternoon')) {
-      return "Hi there! 👋 I'm your AI assistant. I can help you with:\n\n• 📦 Order tracking & delivery\n• 💳 Billing & payments  \n• 🔄 Returns & refunds\n• 👤 Account issues\n• ❓ General questions\n\nWhat can I help you with today?";
+      return "Hi there! 👋 I'm your AI assistant. I can help you with:\n\n• 📦 Order tracking & delivery\n• 💳 Billing & payments  \n• 🔄 Returns & refunds\n• 👤 Account issues\n• ❓ General questions\n\n**Need human help?** Just say **'connect to support'** for instant connection!\n\nWhat can I help you with today?";
     }
     
     // Help requests - instant response

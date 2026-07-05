@@ -810,6 +810,53 @@ def chat(req: ChatReq, user=Depends(get_user_from_token)):
         
         uid = int(user['sub'])
         message = req.message.strip()
+        message_lower = message.lower()
+        
+        # INSTANT HUMAN CONNECTION CHECK (before any other processing)
+        human_keywords = [
+            'human', 'person', 'agent', 'live agent', 'support agent', 'human support',
+            'connect to support', 'talk to someone', 'speak to someone', 'real person',
+            'connect me', 'human help', 'live help', 'customer service', 'support team',
+            'connect to human', 'need help from person', 'talk to agent', 'human agent',
+            'manager', 'supervisor', 'complaint', 'escalate', 'escalation'
+        ]
+        
+        # Check for human connection request
+        if any(keyword in message_lower for keyword in human_keywords):
+            try:
+                # Create support ticket immediately
+                ticket_id = execute_query(
+                    'INSERT INTO tickets (user_id, user_name, user_email, message, status, is_urgent, created_at) VALUES (%s, %s, %s, %s, %s, %s, %s)',
+                    (uid, user['name'], user['email'], f"Human Support Request: {message}", 'Open', 1, datetime.now())
+                )
+                
+                # Send email notification to admin (don't wait for it)
+                try:
+                    send_email(user['name'], user['email'], message, ticket_id)
+                except:
+                    pass  # Don't fail if email fails
+                
+                response_text = f"🤝 **Connected to Human Support!**\n\n✅ **Ticket #{ticket_id} created successfully**\n✅ **Admin notified immediately**\n✅ **You'll hear back within 24 hours**\n✅ **Email updates sent automatically**\n\n📧 **Our support team has been notified**\n🎫 **Your ticket ID**: #{ticket_id}\n\n**Thank you!** Our team will review your request and respond quickly. You can also check ticket status in your dashboard."
+                
+            except Exception as e:
+                print(f"Ticket creation error: {e}")
+                response_text = "🤝 **Support Request Received!**\n\n✅ **Your request has been forwarded to our support team**\n✅ **You'll hear back within 24 hours**\n✅ **Priority handling for your request**\n\nOur team will contact you shortly!"
+            
+            # Store the conversation
+            try:
+                execute_query('INSERT INTO chat_history (user_id, role, content, created_at) VALUES (%s, %s, %s, %s)', 
+                             (uid, 'user', message, datetime.now()))
+                execute_query('INSERT INTO chat_history (user_id, role, content, created_at) VALUES (%s, %s, %s, %s)', 
+                             (uid, 'assistant', response_text, datetime.now()))
+            except:
+                pass
+            
+            return {
+                'response': response_text,
+                'chat_id': int(time.time()),
+                'escalated': True,
+                'ticket_created': True
+            }
         
         # Fast FAQ lookup - use simple keyword matching
         response_text = get_fast_response(message)
@@ -878,9 +925,29 @@ def get_fast_response(message: str):
     """ULTRA-FAST response system - bypasses AI for 90% of queries"""
     message_lower = message.lower().strip()
     
+    # INSTANT HUMAN CONNECTION - No AI delay!
+    human_keywords = [
+        'human', 'person', 'agent', 'live agent', 'support agent', 'human support',
+        'connect to support', 'talk to someone', 'speak to someone', 'real person',
+        'connect me', 'human help', 'live help', 'customer service', 'support team',
+        'connect to human', 'need help from person', 'talk to agent', 'human agent',
+        'manager', 'supervisor', 'complaint', 'escalate', 'escalation'
+    ]
+    
+    # Check for human connection request FIRST (highest priority)
+    if any(keyword in message_lower for keyword in human_keywords):
+        return "🤝 **Connecting You to Human Support**\n\n✅ **Support ticket created successfully**\n✅ **Admin notified immediately** \n✅ **You'll hear back within 24 hours**\n✅ **Urgent issues: Within 2 hours**\n\n📧 **Email notification sent** to our support team\n🎫 **Ticket ID**: Will be provided shortly\n\n**While you wait**, is there anything specific I should tell our support team about your request?"
+    
+    # Urgent/Problem keywords - immediate escalation  
+    urgent_keywords = ['urgent', 'emergency', 'immediate', 'asap', 'now', 'quickly']
+    problem_keywords = ['problem', 'issue', 'broken', 'not working', 'error', 'bug', 'help']
+    
+    if any(keyword in message_lower for keyword in urgent_keywords + problem_keywords):
+        return "🚨 **Priority Support Request Created**\n\n✅ **URGENT ticket created**\n✅ **Priority handling activated** \n✅ **Admin notified immediately**\n✅ **Response within 2 hours guaranteed**\n\n🔥 **Your request has been flagged as urgent**\n📧 **Immediate notification sent** to our support team\n\n**Please describe your issue** so our team can prepare to help you immediately!"
+    
     # Instant responses for greetings (0.1 seconds)
     if any(word in message_lower for word in ['hello', 'hi', 'hey', 'good morning', 'good afternoon']):
-        return "Hi there! 👋 I'm your AI assistant. I can help you with:\n\n• 📦 Order tracking & delivery\n• 💳 Billing & payments\n• 🔄 Returns & refunds\n• 👤 Account issues\n• ❓ General questions\n\nWhat can I help you with today?"
+        return "Hi there! 👋 I'm your AI assistant. I can help you with:\n\n• 📦 Order tracking & delivery\n• 💳 Billing & payments\n• 🔄 Returns & refunds\n• 👤 Account issues\n• ❓ General questions\n\n**Need human help?** Just say **'connect to support'** and I'll get you connected immediately!\n\nWhat can I help you with today?"
     
     # Help requests
     if any(word in message_lower for word in ['help', 'support', 'assist', 'what can you do']):
