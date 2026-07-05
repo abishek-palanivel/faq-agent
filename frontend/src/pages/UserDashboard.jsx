@@ -259,18 +259,51 @@ export default function UserDashboard() {
 
   // Instant responses for common queries (works offline)
   const getInstantResponse = (message) => {
-    const msg = message.toLowerCase();
+    const msg = message.toLowerCase().trim();
     
-    if (msg.includes('hello') || msg.includes('hi') || msg === 'hey') {
-      return "Hi! 👋 I'm your AI assistant. I can help you with questions about orders, billing, returns, account issues, or anything else. What can I help you with today?";
+    // Greetings - instant response
+    if (msg.includes('hello') || msg.includes('hi') || msg === 'hey' || msg.includes('good morning') || msg.includes('good afternoon')) {
+      return "Hi there! 👋 I'm your AI assistant. I can help you with:\n\n• 📦 Order tracking & delivery\n• 💳 Billing & payments  \n• 🔄 Returns & refunds\n• 👤 Account issues\n• ❓ General questions\n\nWhat can I help you with today?";
     }
     
-    if (msg.includes('help') || msg === '?') {
-      return "I'm here to help! 🤝 You can ask me about:\n\n• 📦 Order tracking and delivery\n• 💳 Billing and payment issues\n• 🔄 Returns and refunds\n• 👤 Account management\n• 📋 Product information\n\nWhat would you like to know?";
+    // Help requests - instant response
+    if (msg.includes('help') || msg === '?' || msg.includes('what can you do') || msg.includes('assist')) {
+      return "I'm here to help! 🤝 Here's what I can assist you with:\n\n**📦 Orders & Shipping**\n• Track order status • Check delivery times • Update shipping address\n\n**💳 Billing & Payments**  \n• Payment methods • Update billing info • Receipt requests\n\n**🔄 Returns & Refunds**\n• Return policy info • Start a return • Refund status\n\n**👤 Account Management**\n• Password reset • Update profile • Account settings\n\nJust ask me about any of these topics!";
     }
     
-    if (msg.includes('thank')) {
-      return "You're welcome! 😊 Is there anything else I can help you with today?";
+    // Order tracking - instant response  
+    if (msg.includes('track') || msg.includes('order status') || msg.includes('where is my order')) {
+      return "📦 **Track Your Order**\n\n**Quick Options:**\n• Check your email for tracking link\n• Account → Order History\n• Use tracking number with carrier\n\n**Delivery Times:**\n• Standard: 5-7 days • Express: 1-2 days • International: 10-15 days\n\nNeed help finding your tracking info?";
+    }
+    
+    // Returns - instant response
+    if (msg.includes('return') || msg.includes('refund') || msg.includes('send back')) {
+      return "🔄 **Returns & Refunds**\n\n**Quick Facts:**\n• 30-day return window\n• Items must be unopened\n• Free prepaid shipping labels\n\n**Start Return:** Visit Returns Center → Enter order number → Print label\n**Refund Time:** 3-5 days processing + 5-7 days to bank\n\nNeed help with a specific return?";
+    }
+    
+    // Password/Login - instant response
+    if (msg.includes('password') || msg.includes('login') || msg.includes('sign in') || msg.includes('forgot')) {
+      return "🔐 **Account & Password Help**\n\n**Reset Password:**\n1. Login page → 'Forgot Password'\n2. Enter your email  \n3. Check email for reset link\n4. Create new password\n\n**Login Issues?** Try password reset first!\n**Account locked?** I can help with that!";
+    }
+    
+    // Billing - instant response
+    if (msg.includes('billing') || msg.includes('payment') || msg.includes('card') || msg.includes('charge')) {
+      return "💳 **Billing & Payments**\n\n**We Accept:** Visa, Mastercard, Amex, PayPal, Apple Pay\n**Update Payment:** Account Settings → Billing\n**Get Receipt:** Auto-emailed + available in Order History\n**Billing Issue?** Tell me what specific problem you're having!";
+    }
+    
+    // Thank you - instant response
+    if (msg.includes('thank') || msg.includes('thanks') || msg.includes('appreciate')) {
+      return "You're very welcome! 😊 I'm glad I could help.\n\nIs there anything else you need assistance with today?";
+    }
+    
+    // Shipping - instant response
+    if (msg.includes('shipping') || msg.includes('delivery') || msg.includes('when will it arrive')) {
+      return "🚚 **Shipping & Delivery**\n\n**Options:**\n• Standard (5-7 days): FREE on $50+\n• Express (1-2 days): $9.99\n• International (10-15 days): Calculated at checkout\n\n**Carriers:** FedEx, UPS, DHL\n**Change Address?** Contact within 1 hour of order";
+    }
+    
+    // Cancel order - instant response  
+    if (msg.includes('cancel') || msg.includes('cancel order')) {
+      return "❌ **Cancel Order**\n\n**Within 1 Hour:** Account → Order History → Cancel\n**After 1 Hour:** Can't cancel, but you can return once delivered (30-day policy)\n\n**Need to modify instead?** Contact us for address/item changes!";
     }
     
     return null; // No instant response available
